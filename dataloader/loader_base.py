@@ -52,29 +52,11 @@ class LOADER_BASE(Dataset):
         if args.form == 'coco':
             manager = Manager()
             self.coco_train = manager.dict({
-                "info": {
-                    "year": "",
-                    "version": "",
-                    "description": "",
-                    "contributor": "",
-                    "url": "",
-                    "date_created": ""
-                },
-                "licenses": [],
                 "categories": [],
                 "images": manager.list(),
                 "annotations": manager.list()
             })
             self.coco_val = manager.dict({
-                "info": {
-                    "year": "",
-                    "version": "",
-                    "description": "",
-                    "contributor": "",
-                    "url": "",
-                    "date_created": ""
-                },
-                "licenses": [],
                 "categories": [],
                 "images": manager.list(),
                 "annotations": manager.list()
