@@ -1,5 +1,11 @@
 # base-train
 
+## 🔄 CI
+
+```bash
+git remote add upstream https://github.com/bert13069598/base-train.git
+```
+
 ## 📋 dependency
 
 > python 3.10
