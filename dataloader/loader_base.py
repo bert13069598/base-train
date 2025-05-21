@@ -7,26 +7,29 @@ import numpy as np
 from torch.utils.data import Dataset
 
 
-def get_warpAffineM(w: int, h: int,
-                    dst_w: int, dst_h: int) -> np.ndarray:
-    scale = min((dst_w / w, dst_h / h))
-    ox = (dst_w - scale * w) / 2
-    oy = (dst_h - scale * h) / 2
-    return np.array([
-        [scale, 0, ox],
-        [0, scale, oy]
-    ], dtype=np.float32)
+class LetterBox:
+    def __init__(self,
+                 src_w: int,
+                 src_h: int,
+                 dst_w: int = 640,
+                 dst_h: int = 640):
+        self.dst_w = dst_w
+        self.dst_h = dst_h
+        scale = min((dst_w / src_w, dst_h / src_h))
+        ox = (dst_w - scale * src_w) / 2
+        oy = (dst_h - scale * src_h) / 2
+        self.M = np.array([
+            [scale, 0, ox],
+            [0, scale, oy]
+        ], dtype=np.float32)
 
-
-def preprocess_warpAffine(image: np.ndarray,
-                          M: np.ndarray,
-                          dst_w: int,
-                          dst_h: int) -> np.ndarray:
-    return cv2.warpAffine(image, M,
-                          (dst_w, dst_h),
-                          flags=cv2.INTER_LINEAR,
-                          borderMode=cv2.BORDER_CONSTANT,
-                          borderValue=(114, 114, 114))
+    def __call__(self,
+                 image: np.ndarray) -> np.ndarray:
+        return cv2.warpAffine(image, self.M,
+                              (self.dst_w, self.dst_h),
+                              flags=cv2.INTER_LINEAR,
+                              borderMode=cv2.BORDER_CONSTANT,
+                              borderValue=(114, 114, 114))
 
 
 class LOADER_BASE(Dataset):
@@ -37,6 +40,8 @@ class LOADER_BASE(Dataset):
         self.path = make_path
         self.images = image
         self.labels = label
+
+        self.letterbox = None
 
         n_total = len(self)
         n_train = int(n_total * split_ratio)
@@ -114,8 +119,9 @@ class LOADER_BASE(Dataset):
         new_label_path = os.path.join(self.path, f'labels/{tvt}', new_label_name)
 
         if resize is not None:
-            self.M = get_warpAffineM(*image.shape[:2][::-1], *resize)
-            image = preprocess_warpAffine(image, self.M, *resize)
+            if self.letterbox is None:
+                self.letterbox = LetterBox(*image.shape[:2][::-1], *resize)
+            image = self.letterbox(image)
 
         # copy image
         cv2.imwrite(new_image_path, image)
