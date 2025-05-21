@@ -23,15 +23,19 @@ def main():
     # make & load dataset
     root_path, datasets = data_select(args)
 
-    # check & convert to yolo dataset
-    print(len(datasets))
+    # check dataset
     if args.show:
-        for _ in tqdm(enumerate(datasets), total=len(datasets), ncols=80):
-            key = cv2.waitKey(1) & 0xFF
-            if key == 27:
-                break
+        paused = False
+        key = 0
+        while key != 27:
+            for _ in tqdm(enumerate(datasets), total=len(datasets), ncols=80):
+                key = cv2.waitKey(0 if paused else 1) & 0xFF
+                if key == 27:  # ESC key
+                    break
+                elif key == 32:  # Space key
+                    paused = not paused
 
-    # make & copy yolo dataset
+    # convert & copy dataset
     if args.make:
         print(f'{args.form} datasets saved in', root_path)
 
