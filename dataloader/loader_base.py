@@ -177,7 +177,7 @@ class LOADER_BASE(Dataset):
                  width: int, height: int
                  ):
         if len(labels):
-            for label in labels:
+            for box_id, label in enumerate(labels):
                 x, y = map(int, self.letterbox.M @ np.hstack([label[:2], 1]))
                 w, h = map(int, self.letterbox.M[:, :2] @ label[2:4])
 
@@ -191,7 +191,7 @@ class LOADER_BASE(Dataset):
                         "date_captured": ""
                     })
                     coco["annotations"].append({
-                        "id": 0,            # bbox id
+                        "id": box_id,       # bbox id
                         "image_id": i,      # image id
                         "category_id": 1,
                         "bbox": [x, y, w, h],
