@@ -1,10 +1,10 @@
-import os
-from multiprocessing import Manager
-from typing import Tuple
-
 import cv2
 import numpy as np
+import os
+from concurrent.futures import ThreadPoolExecutor
+from multiprocessing import Manager
 from torch.utils.data import Dataset
+from typing import Tuple
 
 
 class LetterBox:
@@ -158,32 +158,38 @@ class LOADER_BASE(Dataset):
                  labels: np.ndarray,
                  width: int, height: int
                  ):
+        def annotate_image(coco):
+            coco["images"].append({
+                "id": i,
+                "license": 0,
+                "file_name": new_image_path.split('/')[-1],
+                "height": height,
+                "width": width,
+                "date_captured": ""
+            })
+
         if len(labels):
-            for box_id, label in enumerate(labels):
+            def annotate_label(box_id, label):
                 x, y = map(int, self.letterbox.M @ np.hstack([label[:2], 1]))
                 w, h = map(int, self.letterbox.M[:, :2] @ label[2:4])
-                cls = label[4]
+                cls = int(label[4])
+                return {
+                    "id": box_id,  # bbox id
+                    "image_id": i,  # image id
+                    "category_id": cls + 1,
+                    "bbox": [x, y, w, h],
+                    "area": w * h,
+                    "segmentation": [],
+                    "iscrowd": 0
+                }
 
-                def annotate(coco):
-                    coco["images"].append({
-                        "id": i,
-                        "license": 0,
-                        "file_name": new_image_path.split('/')[-1],
-                        "height": height,
-                        "width": width,
-                        "date_captured": ""
-                    })
-                    coco["annotations"].append({
-                        "id": box_id,       # bbox id
-                        "image_id": i,      # image id
-                        "category_id": cls + 1,
-                        "bbox": [x, y, w, h],
-                        "area": w * h,
-                        "segmentation": [],
-                        "iscrowd": 0
-                    })
-
-                if self.split_i[i] == 0:
-                    annotate(self.coco_train)
-                elif self.split_i[i] == 1:
-                    annotate(self.coco_val)
+            with ThreadPoolExecutor() as executor:
+                annotations = list(executor.map(lambda args: annotate_label(*args), enumerate(labels)))
+        else:
+            annotations = []
+        if self.split_i[i] == 0:
+            annotate_image(self.coco_train)
+            self.coco_train["annotations"].extend(annotations)
+        elif self.split_i[i] == 1:
+            annotate_image(self.coco_val)
+            self.coco_val["annotations"].extend(annotations)
