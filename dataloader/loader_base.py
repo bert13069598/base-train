@@ -79,7 +79,6 @@ class LOADER_BASE(Dataset):
                 "images": manager.list(),
                 "annotations": manager.list()
             })
-            self.M = None
 
     def __len__(self):
         return len(self.images)
@@ -179,8 +178,8 @@ class LOADER_BASE(Dataset):
                  ):
         if len(labels):
             for label in labels:
-                x, y = map(int, self.M @ np.hstack([label[:2], 1]))
-                w, h = map(int, self.M[:, :2] @ label[2:])
+                x, y = map(int, self.letterbox.M @ np.hstack([label[:2], 1]))
+                w, h = map(int, self.letterbox.M[:, :2] @ label[2:4])
 
                 def annotate(coco):
                     coco["images"].append({
