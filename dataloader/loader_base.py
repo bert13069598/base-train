@@ -92,7 +92,9 @@ class LOADER_BASE(Dataset):
 
         :param i: index
         :param image: original image
-        :param label: [x, y, w, h, cls]
+        :param label: [[x, y, w, h, cls],
+                       [x, y, w, h, cls],
+                       ...]
         :return:
         """
         match self.form:
@@ -117,6 +119,7 @@ class LOADER_BASE(Dataset):
         new_image_name = '.'.join(self.images[i].split('/')[-path_depth:])
         if isinstance(self.labels[i], str):
             new_label_name = '.'.join(self.labels[i].split('/')[-path_depth:])
+            new_label_name = new_label_name.replace('json', 'txt')
         else:
             new_label_name = new_image_name.replace('jpg', 'txt')
         if self.split_i[i] == 0:
@@ -140,62 +143,65 @@ class LOADER_BASE(Dataset):
 
     @staticmethod
     def yolo_hbb(new_label_path: str,
-                 label: np.ndarray,
+                 labels: np.ndarray,
                  width, height
                  ):
         with open(new_label_path, 'w', encoding='utf-8') as f:
-            if len(label):
-                x, y, w, h = label[:4]
-                cx, cy, w, h = (x + w / 2) / width, (y + h / 2) / height, w / width, h / height
-                f.write('{} {:.6f} {:.6f} {:.6f} {:.6f}\n'.format(0, cx, cy, w, h))
+            for label in labels:
+                if len(label):
+                    x, y, w, h, cls = label[:5]
+                    cx, cy, w, h = (x + w / 2) / width, (y + h / 2) / height, w / width, h / height
+                    f.write('{} {:.6f} {:.6f} {:.6f} {:.6f}\n'.format(cls, cx, cy, w, h))
 
     @staticmethod
     def yolo_obb(new_label_path: str,
-                 label: np.ndarray,
+                 labels: np.ndarray,
                  width, height
                  ):
         with open(new_label_path, 'w', encoding='utf-8') as f:
-            if label.shape[0]:
-                cls = label[:, 0]
-                xyxyxyxys = label[:, 1:]
+            if labels.shape[0]:
+                for label in labels:
+                    cls = label[:, 0]
+                    xyxyxyxys = label[:, 1:]
 
-                xyxyxyxys[:, 0::2] /= width
-                xyxyxyxys[:, 1::2] /= height
-                for c, xyxyxyxy in zip(cls, xyxyxyxys):
-                    f.write('{:d} {:.6f} {:.6f} {:.6f} {:.6f} {:.6f} {:.6f} {:.6f} {:.6f}\n'.format(
-                        int(c),
-                        xyxyxyxy[0], xyxyxyxy[1], xyxyxyxy[2], xyxyxyxy[3],
-                        xyxyxyxy[4], xyxyxyxy[5], xyxyxyxy[6], xyxyxyxy[7]))
+                    xyxyxyxys[:, 0::2] /= width
+                    xyxyxyxys[:, 1::2] /= height
+                    for c, xyxyxyxy in zip(cls, xyxyxyxys):
+                        f.write('{:d} {:.6f} {:.6f} {:.6f} {:.6f} {:.6f} {:.6f} {:.6f} {:.6f}\n'.format(
+                            int(c),
+                            xyxyxyxy[0], xyxyxyxy[1], xyxyxyxy[2], xyxyxyxy[3],
+                            xyxyxyxy[4], xyxyxyxy[5], xyxyxyxy[6], xyxyxyxy[7]))
 
     def coco_hbb(self,
                  i: int, new_image_path: str,
-                 label: np.ndarray,
+                 labels: np.ndarray,
                  width: int, height: int
                  ):
-        if len(label):
-            x, y = map(int, self.M @ np.hstack([label[:2], 1]))
-            w, h = map(int, self.M[:, :2] @ label[2:])
+        if len(labels):
+            for label in labels:
+                x, y = map(int, self.M @ np.hstack([label[:2], 1]))
+                w, h = map(int, self.M[:, :2] @ label[2:])
 
-            def annotate(coco):
-                coco["images"].append({
-                    "id": i,
-                    "license": 0,
-                    "file_name": new_image_path.split('/')[-1],
-                    "height": height,
-                    "width": width,
-                    "date_captured": ""
-                })
-                coco["annotations"].append({
-                    "id": 0,            # bbox id
-                    "image_id": i,      # image id
-                    "category_id": 1,
-                    "bbox": [x, y, w, h],
-                    "area": w * h,
-                    "segmentation": [],
-                    "iscrowd": 0
-                })
+                def annotate(coco):
+                    coco["images"].append({
+                        "id": i,
+                        "license": 0,
+                        "file_name": new_image_path.split('/')[-1],
+                        "height": height,
+                        "width": width,
+                        "date_captured": ""
+                    })
+                    coco["annotations"].append({
+                        "id": 0,            # bbox id
+                        "image_id": i,      # image id
+                        "category_id": 1,
+                        "bbox": [x, y, w, h],
+                        "area": w * h,
+                        "segmentation": [],
+                        "iscrowd": 0
+                    })
 
-            if self.split_i[i] == 0:
-                annotate(self.coco_train)
-            elif self.split_i[i] == 1:
-                annotate(self.coco_val)
+                if self.split_i[i] == 0:
+                    annotate(self.coco_train)
+                elif self.split_i[i] == 1:
+                    annotate(self.coco_val)
