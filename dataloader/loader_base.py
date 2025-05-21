@@ -162,6 +162,7 @@ class LOADER_BASE(Dataset):
             for box_id, label in enumerate(labels):
                 x, y = map(int, self.letterbox.M @ np.hstack([label[:2], 1]))
                 w, h = map(int, self.letterbox.M[:, :2] @ label[2:4])
+                cls = label[4]
 
                 def annotate(coco):
                     coco["images"].append({
@@ -175,7 +176,7 @@ class LOADER_BASE(Dataset):
                     coco["annotations"].append({
                         "id": box_id,       # bbox id
                         "image_id": i,      # image id
-                        "category_id": 1,
+                        "category_id": cls + 1,
                         "bbox": [x, y, w, h],
                         "area": w * h,
                         "segmentation": [],
