@@ -169,12 +169,15 @@ class LOADER_BASE(Dataset):
             })
 
         if len(labels):
+            scale = self.letterbox.M[0, 0]
+            oxy = self.letterbox.M[:, 2]
+            labels[:, :4] *= scale
+            labels[:, :2] += oxy
+
             def annotate_label(box_id, label):
-                x, y = map(int, self.letterbox.M @ np.hstack([label[:2], 1]))
-                w, h = map(int, self.letterbox.M[:, :2] @ label[2:4])
-                cls = int(label[4])
+                x, y, w, h, cls = map(int, label)
                 return {
-                    "id": box_id,  # bbox id
+                    "id": box_id,   # bbox id
                     "image_id": i,  # image id
                     "category_id": cls + 1,
                     "bbox": [x, y, w, h],
