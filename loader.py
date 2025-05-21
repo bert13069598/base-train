@@ -26,7 +26,7 @@ def main():
     # check & convert to yolo dataset
     print(len(datasets))
     if args.show:
-        for _ in datasets:
+        for _ in tqdm(enumerate(datasets), total=len(datasets), ncols=80):
             key = cv2.waitKey(1) & 0xFF
             if key == 27:
                 break
