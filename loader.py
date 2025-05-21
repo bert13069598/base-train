@@ -21,10 +21,8 @@ assert not (args.show and args.make), 'not support both show and make yet'
 
 
 def main():
-    images, labels = [], []
-
     # make & load dataset
-    root_path, datasets = data_select(args, images, labels)
+    root_path, datasets = data_select(args)
 
     # check & convert to yolo dataset
     print(len(datasets))
