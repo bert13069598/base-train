@@ -12,7 +12,7 @@ class LOADER(LOADER_BASE):
         super().__init__(*args, **kwargs)
         pass
 
-    def __getitem(self, i):
+    def __getitem__(self, i):
         image = cv2.imread(self.images[i])
         label = self.labels[i]
 
