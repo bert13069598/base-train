@@ -1,0 +1,170 @@
+import os
+from multiprocessing import Manager
+from typing import Tuple
+
+import cv2
+import numpy as np
+from torch.utils.data import Dataset
+
+
+def get_warpAffineM(w: int, h: int,
+                    dst_w: int, dst_h: int) -> np.ndarray:
+    scale = min((dst_w / w, dst_h / h))
+    ox = (dst_w - scale * w) / 2
+    oy = (dst_h - scale * h) / 2
+    return np.array([
+        [scale, 0, ox],
+        [0, scale, oy]
+    ], dtype=np.float32)
+
+
+def preprocess_warpAffine(image: np.ndarray,
+                          M: np.ndarray,
+                          dst_w: int,
+                          dst_h: int) -> np.ndarray:
+    return cv2.warpAffine(image, M,
+                          (dst_w, dst_h),
+                          flags=cv2.INTER_LINEAR,
+                          borderMode=cv2.BORDER_CONSTANT,
+                          borderValue=(114, 114, 114))
+
+
+class LOADER_BASE(Dataset):
+    def __init__(self, args, image, label, make_path, split_ratio=0.8):
+        self.make = args.make
+        self.show = args.show
+        self.form = args.form
+        self.path = make_path
+        self.images = image
+        self.labels = label
+
+        n_total = len(self)
+        n_train = int(n_total * split_ratio)
+        n_val = n_total - n_train
+        self.split_i = np.array([0] * n_train + [1] * n_val, dtype=np.int8)
+        np.random.default_rng(seed=42).shuffle(self.split_i)
+
+        if args.form == 'coco':
+            manager = Manager()
+            self.coco_train = manager.dict({
+                "info": {
+                    "year": "",
+                    "version": "",
+                    "description": "",
+                    "contributor": "",
+                    "url": "",
+                    "date_created": ""
+                },
+                "licenses": [],
+                "categories": [],
+                "images": manager.list(),
+                "annotations": manager.list()
+            })
+            self.coco_val = manager.dict({
+                "info": {
+                    "year": "",
+                    "version": "",
+                    "description": "",
+                    "contributor": "",
+                    "url": "",
+                    "date_created": ""
+                },
+                "licenses": [],
+                "categories": [],
+                "images": manager.list(),
+                "annotations": manager.list()
+            })
+            self.M = None
+
+    def __len__(self):
+        return len(self.images)
+
+    def install(self,
+                i: int,
+                image: np.ndarray,
+                path_depth: int = 3,
+                resize: Tuple[int, int] = None):
+        new_image_name = '.'.join(self.images[i].split('/')[-path_depth:])
+        if isinstance(self.labels[i], str):
+            new_label_name = '.'.join(self.labels[i].split('/')[-path_depth:])
+        else:
+            new_label_name = new_image_name.replace('jpg', 'txt')
+        if self.split_i[i] == 0:
+            tvt = 'train'
+        elif self.split_i[i] == 1:
+            tvt = 'val'
+        else:
+            tvt = 'test'
+        new_image_path = os.path.join(self.path, f'images/{tvt}', new_image_name)
+        new_label_path = os.path.join(self.path, f'labels/{tvt}', new_label_name)
+
+        if resize is not None:
+            self.M = get_warpAffineM(*image.shape[:2][::-1], *resize)
+            image = preprocess_warpAffine(image, self.M, *resize)
+
+        # copy image
+        cv2.imwrite(new_image_path, image)
+
+        return new_image_path, new_label_path
+
+    def yolo_hbb(self,
+                 new_label_path: str,
+                 label: np.ndarray,
+                 width, height
+                 ):
+        with open(new_label_path, 'w', encoding='utf-8') as f:
+            if len(label):
+                x, y, w, h = label[:4]
+                cx, cy, w, h = (x + w / 2) / width, (y + h / 2) / height, w / width, h / height
+                f.write('{} {:.6f} {:.6f} {:.6f} {:.6f}\n'.format(0, cx, cy, w, h))
+
+    def yolo_obb(self,
+                 new_label_path: str,
+                 label: np.ndarray,
+                 width, height
+                 ):
+        with open(new_label_path, 'w', encoding='utf-8') as f:
+            if label.shape[0]:
+                cls = label[:, 0]
+                xyxyxyxys = label[:, 1:]
+
+                xyxyxyxys[:, 0::2] /= width
+                xyxyxyxys[:, 1::2] /= height
+                for c, xyxyxyxy in zip(cls, xyxyxyxys):
+                    f.write('{:d} {:.6f} {:.6f} {:.6f} {:.6f} {:.6f} {:.6f} {:.6f} {:.6f}\n'.format(
+                        int(c),
+                        xyxyxyxy[0], xyxyxyxy[1], xyxyxyxy[2], xyxyxyxy[3],
+                        xyxyxyxy[4], xyxyxyxy[5], xyxyxyxy[6], xyxyxyxy[7]))
+
+    def coco_hbb(self,
+                 i: int, new_image_path: str,
+                 label: np.ndarray,
+                 width: int, height: int
+                 ):
+        if len(label):
+            x, y = map(int, self.M @ np.hstack([label[:2], 1]))
+            w, h = map(int, self.M[:, :2] @ label[2:])
+
+            def annotate(coco):
+                coco["images"].append({
+                    "id": i,
+                    "license": 0,
+                    "file_name": new_image_path.split('/')[-1],
+                    "height": height,
+                    "width": width,
+                    "date_captured": ""
+                })
+                coco["annotations"].append({
+                    "id": 0,            # bbox id
+                    "image_id": i,      # image id
+                    "category_id": 1,
+                    "bbox": [x, y, w, h],
+                    "area": w * h,
+                    "segmentation": [],
+                    "iscrowd": 0
+                })
+
+            if self.split_i[i] == 0:
+                annotate(self.coco_train)
+            elif self.split_i[i] == 1:
+                annotate(self.coco_val)
