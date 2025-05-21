@@ -79,6 +79,21 @@ class LOADER_BASE(Dataset):
     def __len__(self):
         return len(self.images)
 
+    def installer(self, i, image, label):
+        match self.form:
+            case 'yolo':
+                _, new_label_path = self.install(i, image)
+                # make label
+                self.yolo_hbb(new_label_path,
+                              label,
+                              *image.shape[:2][::-1])
+            case 'coco':
+                new_image_path, _ = self.install(i, image, resize=(640, 640))
+                # make label
+                self.coco_hbb(i, new_image_path,
+                              label,
+                              640, 640)
+
     def install(self,
                 i: int,
                 image: np.ndarray,
@@ -107,8 +122,8 @@ class LOADER_BASE(Dataset):
 
         return new_image_path, new_label_path
 
-    def yolo_hbb(self,
-                 new_label_path: str,
+    @staticmethod
+    def yolo_hbb(new_label_path: str,
                  label: np.ndarray,
                  width, height
                  ):
@@ -118,8 +133,8 @@ class LOADER_BASE(Dataset):
                 cx, cy, w, h = (x + w / 2) / width, (y + h / 2) / height, w / width, h / height
                 f.write('{} {:.6f} {:.6f} {:.6f} {:.6f}\n'.format(0, cx, cy, w, h))
 
-    def yolo_obb(self,
-                 new_label_path: str,
+    @staticmethod
+    def yolo_obb(new_label_path: str,
                  label: np.ndarray,
                  width, height
                  ):

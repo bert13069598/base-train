@@ -6,7 +6,6 @@ import cv2
 from torch.utils.data import DataLoader
 from tqdm import tqdm
 
-from cfg.config import make_dir
 from dataloader.loader_case import data_select
 
 parser = argparse.ArgumentParser(description='prepare train, val dataset')
