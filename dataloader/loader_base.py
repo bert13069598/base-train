@@ -84,7 +84,17 @@ class LOADER_BASE(Dataset):
     def __len__(self):
         return len(self.images)
 
-    def installer(self, i, image, label):
+    def installer(self,
+                  i: int,
+                  image: np.ndarray,
+                  label: np.ndarray):
+        """
+
+        :param i: index
+        :param image: original image
+        :param label: [x, y, w, h, cls]
+        :return:
+        """
         match self.form:
             case 'yolo':
                 _, new_label_path = self.install(i, image)
