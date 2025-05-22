@@ -1,10 +1,11 @@
-import cv2
-import numpy as np
 import os
 from concurrent.futures import ThreadPoolExecutor
 from multiprocessing import Manager
-from torch.utils.data import Dataset
 from typing import Tuple
+
+import cv2
+import numpy as np
+from torch.utils.data import Dataset
 
 
 class LetterBox:
@@ -82,6 +83,8 @@ class LOADER_BASE(Dataset):
                        ...]
         :return:
         """
+        if label.dtype != 'float32':
+            label = np.astype(label, np.float32)
         match self.make:
             case 'yolo':
                 _, new_label_path = self.install(i, image)
