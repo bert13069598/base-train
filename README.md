@@ -30,9 +30,10 @@ python loader.py 0 --make yolo
 - `--show` : 라벨링 이미지 확인
 - `--make` : 학습 데이터셋 저장 (`yolo`, `coco`)
 - `--work` : make할 때 멀티프로세스 코어 갯수
+- `--path` : 학습 데이터 저장 위치 (기본 위치 : yaml의 path)
 
-1. [cfg/config.py](cfg/config.py)에서 경로 추가
-2. [dataloader/loader/__init__.py](dataloader/loader/__init__.py) 딕셔너리 추가
+1. [cfg/datasets](cfg/datasets)에 `yaml` 파일명을 프로젝트명과 동일하게 준비
+2. [dataloader/loader/__init__.py](dataloader/loader/__init__.py) 프로젝트명 data에 추가
 3. loader.py 옵션 지정 후 구동
 
 | dataset | folder path / filename | idx | total | link |

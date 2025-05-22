@@ -13,6 +13,7 @@ parser.add_argument('data', type=int, help='dataset option', default=0)
 parser.add_argument('--show', action='store_true', help='whether show data')
 parser.add_argument('--make', choices=['yolo', 'coco'], help='which format to convert')
 parser.add_argument('--work', type=int, help='num of workers for multiprocessing', default=16)
+parser.add_argument('--path', type=str, help='path to save the training dataset')
 args = parser.parse_args()
 
 if args.show and args.make:

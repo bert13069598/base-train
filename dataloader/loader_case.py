@@ -11,7 +11,10 @@ def data_select(args):
     if args.data not in loader.loader_map:
         raise ValueError('No matching dataset')
 
-    data = loader.data[args.data]
+    if args.path:
+        data = args.path
+    else:
+        data = loader.data[args.data]
 
     with open(os.path.join('cfg', 'datasets', data + '.yaml'), 'r') as f:
         cfg = yaml.safe_load(f)
