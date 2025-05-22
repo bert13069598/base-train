@@ -10,16 +10,13 @@ from dataloader.loader_case import data_select
 
 parser = argparse.ArgumentParser(description='prepare train, val dataset')
 parser.add_argument('data', type=int, help='dataset option', default=0)
-parser.add_argument('--form', choices=['yolo', 'coco'], help='which format to convert')
 parser.add_argument('--show', action='store_true', help='whether show data')
-parser.add_argument('--make', action='store_true', help='whether save data')
+parser.add_argument('--make', choices=['yolo', 'coco'], help='which format to convert')
 parser.add_argument('--work', type=int, help='num of workers for multiprocessing', default=16)
 args = parser.parse_args()
 
 if args.show and args.make:
     parser.error("Not support both show and make yet.")
-if args.make and args.form is None:
-    parser.error("--form is required when --make is specified.")
 
 
 def main():
@@ -38,9 +35,9 @@ def main():
 
     # convert & copy dataset
     if args.make:
-        print(f'{args.form} datasets saved in', root_path)
+        print(f'{args.make} datasets saved in', root_path)
 
-        match args.form:
+        match args.make:
             case 'yolo':
                 paths = ['images/train', 'labels/train', 'images/val', 'labels/val']
             case 'coco':
@@ -52,7 +49,7 @@ def main():
         for idx, _ in tqdm(enumerate(dataloader), total=len(datasets), ncols=80):
             pass
 
-        if args.form == 'coco':
+        if args.make == 'coco':
             def dump(filename, coco):
                 coco_dict = dict(coco)
                 coco_dict["images"] = list(coco_dict["images"])

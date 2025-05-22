@@ -36,7 +36,6 @@ class LOADER_BASE(Dataset):
     def __init__(self, args, image, label, make_path, split_ratio=0.8):
         self.make = args.make
         self.show = args.show
-        self.form = args.form
         self.path = make_path
         self.images = image
         self.labels = label
@@ -49,7 +48,7 @@ class LOADER_BASE(Dataset):
         self.split_i = np.array([0] * n_train + [1] * n_val, dtype=np.int8)
         np.random.default_rng(seed=42).shuffle(self.split_i)
 
-        if args.form == 'coco':
+        if args.make == 'coco':
             manager = Manager()
             self.coco_train = manager.dict({
                 "categories": [],
@@ -83,7 +82,7 @@ class LOADER_BASE(Dataset):
                        ...]
         :return:
         """
-        match self.form:
+        match self.make:
             case 'yolo':
                 _, new_label_path = self.install(i, image)
                 # make label
@@ -135,7 +134,7 @@ class LOADER_BASE(Dataset):
                 labels[:, 1:4:2] /= height
                 for label in labels:
                     cx, cy, w, h, cls = label[:5]
-                    f.write('{:d} {:.6f} {:.6f} {:.6f} {:.6f}\n'.format(cls, cx, cy, w, h))
+                    f.write('{:d} {:.6f} {:.6f} {:.6f} {:.6f}\n'.format(int(cls), cx, cy, w, h))
 
     @staticmethod
     def yolo_obb(new_label_path: str,
@@ -149,7 +148,7 @@ class LOADER_BASE(Dataset):
                 for label in labels:
                     cls, x1, y1, x2, y2, x3, y3, x4, y4 = label
                     f.write('{:d} {:.6f} {:.6f} {:.6f} {:.6f} {:.6f} {:.6f} {:.6f} {:.6f}\n'.format(
-                        cls, x1, y1, x2, y2, x3, y3, x4, y4))
+                        int(cls), x1, y1, x2, y2, x3, y3, x4, y4))
 
     def coco_hbb(self,
                  i: int, new_image_path: str,

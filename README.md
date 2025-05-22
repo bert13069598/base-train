@@ -21,13 +21,14 @@ pip install -r requirements.txt
 예시
 
 ```bash
-python loader.py 0 yolo --show
+python loader.py 0 --show
 ```
-
+```bash
+python loader.py 0 --make yolo
+```
 - 인덱스 : 준비할 데이터셋 idx
-- 형식 : 변환할 형식 (`yolo`, `coco`)
 - `--show` : 라벨링 이미지 확인
-- `--make` : 학습 데이터셋 저장
+- `--make` : 학습 데이터셋 저장 (`yolo`, `coco`)
 - `--work` : make할 때 멀티프로세스 코어 갯수
 
 1. [cfg/config.py](cfg/config.py)에서 경로 추가
