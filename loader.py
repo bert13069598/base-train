@@ -46,14 +46,16 @@ def main():
             os.makedirs(os.path.join(root_path, path), exist_ok=True)
 
         dataloader = DataLoader(datasets, num_workers=args.work)
-        for idx, _ in tqdm(enumerate(dataloader), total=len(datasets), ncols=80):
-            pass
+        for idx, _ in tqdm(enumerate(dataloader), total=len(datasets), ncols=80): pass
 
         if args.make == 'coco':
+            categories = [{"id": k, "name": v} for k, v in datasets.cls2name.items()]
+
             def dump(filename, coco):
                 coco_dict = dict(coco)
                 coco_dict["images"] = list(coco_dict["images"])
                 coco_dict["annotations"] = list(coco_dict["annotations"])
+                coco_dict["categories"] = categories
                 with open(os.path.join(root_path, 'labels', filename), 'w', encoding='utf-8') as f:
                     json.dump(coco_dict, f, ensure_ascii=False, indent=4)
 

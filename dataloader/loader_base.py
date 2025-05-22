@@ -51,16 +51,12 @@ class LOADER_BASE(Dataset):
 
         if args.make == 'coco':
             manager = Manager()
-            self.coco_train = manager.dict({
-                "categories": [],
+            coco_dict = {
                 "images": manager.list(),
                 "annotations": manager.list()
-            })
-            self.coco_val = manager.dict({
-                "categories": [],
-                "images": manager.list(),
-                "annotations": manager.list()
-            })
+            }
+            self.coco_train = manager.dict(coco_dict)
+            self.coco_val = manager.dict(coco_dict)
 
     def __len__(self):
         return len(self.images)
@@ -179,7 +175,7 @@ class LOADER_BASE(Dataset):
                 return {
                     "id": box_id,   # bbox id
                     "image_id": i,  # image id
-                    "category_id": cls + 1,
+                    "category_id": cls,
                     "bbox": [x, y, w, h],
                     "area": w * h,
                     "segmentation": [],
