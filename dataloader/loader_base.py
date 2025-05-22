@@ -92,7 +92,7 @@ class LOADER_BASE(Dataset):
                     self.yolo_hbb(new_label_path,
                                   label,
                                   *image.shape[:2][::-1])
-                else:
+                elif label.shape[1] == 9:
                     self.yolo_obb(new_label_path,
                                   label,
                                   *image.shape[:2][::-1])
