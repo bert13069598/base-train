@@ -1,7 +1,7 @@
 import argparse
 import os
 
-from ultralytics import YOLO
+from myyolo.models.yolo.model import YOLO
 
 parser = argparse.ArgumentParser(description='YOLO export')
 parser.add_argument('-m', '--model', type=str, help='model name for .pt',
