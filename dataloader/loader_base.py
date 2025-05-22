@@ -98,11 +98,7 @@ class LOADER_BASE(Dataset):
                 path_depth: int = 3,
                 resize: Tuple[int, int] = None):
         new_image_name = '.'.join(self.images[i].split('/')[-path_depth:])
-        if isinstance(self.labels[i], str):
-            new_label_name = '.'.join(self.labels[i].split('/')[-path_depth:])
-            new_label_name = new_label_name.replace('json', 'txt')
-        else:
-            new_label_name = new_image_name.replace('jpg', 'txt')
+        new_label_name = new_image_name.replace('jpg', 'txt')
         if self.split_i[i] == 0:
             tvt = 'train'
         elif self.split_i[i] == 1:
@@ -128,10 +124,12 @@ class LOADER_BASE(Dataset):
                  width, height
                  ):
         with open(new_label_path, 'w', encoding='utf-8') as f:
-            for label in labels:
-                if len(label):
-                    x, y, w, h, cls = label[:5]
-                    cx, cy, w, h = (x + w / 2) / width, (y + h / 2) / height, w / width, h / height
+            if len(labels):
+                labels[:, [0, 1]] += labels[:, [2, 3]] / 2
+                labels[:, :4:2] /= width
+                labels[:, 1:4:2] /= height
+                for label in labels:
+                    cx, cy, w, h, cls = label[:5]
                     f.write('{} {:.6f} {:.6f} {:.6f} {:.6f}\n'.format(cls, cx, cy, w, h))
 
     @staticmethod
