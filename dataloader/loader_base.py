@@ -73,8 +73,13 @@ class LOADER_BASE(Dataset):
 
         :param i: index
         :param image: original image
-        :param label: [[x, y, w, h, cls],
+        :param label: hbb
+                      [[x, y, w, h, cls],
                        [x, y, w, h, cls],
+                       ...]
+                      obb
+                      [[cls, x1, y1, x2, y2, x3, y3, x4, y4],
+                       [cls, x1, y1, x2, y2, x3, y3, x4, y2],
                        ...]
         :return:
         """
@@ -126,11 +131,11 @@ class LOADER_BASE(Dataset):
         with open(new_label_path, 'w', encoding='utf-8') as f:
             if len(labels):
                 labels[:, [0, 1]] += labels[:, [2, 3]] / 2
-                labels[:, :4:2] /= width
+                labels[:, 0:4:2] /= width
                 labels[:, 1:4:2] /= height
                 for label in labels:
                     cx, cy, w, h, cls = label[:5]
-                    f.write('{} {:.6f} {:.6f} {:.6f} {:.6f}\n'.format(cls, cx, cy, w, h))
+                    f.write('{:d} {:.6f} {:.6f} {:.6f} {:.6f}\n'.format(cls, cx, cy, w, h))
 
     @staticmethod
     def yolo_obb(new_label_path: str,
@@ -138,18 +143,13 @@ class LOADER_BASE(Dataset):
                  width, height
                  ):
         with open(new_label_path, 'w', encoding='utf-8') as f:
-            if labels.shape[0]:
+            if len(labels):
+                labels[:, 1::2] /= width
+                labels[:, 2::2] /= height
                 for label in labels:
-                    cls = label[:, 0]
-                    xyxyxyxys = label[:, 1:]
-
-                    xyxyxyxys[:, 0::2] /= width
-                    xyxyxyxys[:, 1::2] /= height
-                    for c, xyxyxyxy in zip(cls, xyxyxyxys):
-                        f.write('{:d} {:.6f} {:.6f} {:.6f} {:.6f} {:.6f} {:.6f} {:.6f} {:.6f}\n'.format(
-                            int(c),
-                            xyxyxyxy[0], xyxyxyxy[1], xyxyxyxy[2], xyxyxyxy[3],
-                            xyxyxyxy[4], xyxyxyxy[5], xyxyxyxy[6], xyxyxyxy[7]))
+                    cls, x1, y1, x2, y2, x3, y3, x4, y4 = label
+                    f.write('{:d} {:.6f} {:.6f} {:.6f} {:.6f} {:.6f} {:.6f} {:.6f} {:.6f}\n'.format(
+                        cls, x1, y1, x2, y2, x3, y3, x4, y4))
 
     def coco_hbb(self,
                  i: int, new_image_path: str,
