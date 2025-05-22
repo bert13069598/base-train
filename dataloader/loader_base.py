@@ -34,12 +34,15 @@ class LetterBox:
 
 
 class LOADER_BASE(Dataset):
-    def __init__(self, args, image, label, make_path, split_ratio=0.8):
+    def __init__(self, args, image, label, make_path, cls2name, split_ratio=0.8):
         self.make = args.make
         self.show = args.show
         self.path = make_path
         self.images = image
         self.labels = label
+
+        self.cls2name = cls2name
+        self.name2cls = {v: k for k, v in self.cls2name.items()}
 
         self.letterbox = None
 

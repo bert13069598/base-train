@@ -10,7 +10,6 @@ def CRAWLER(root, images, labels):
 class LOADER(LOADER_BASE):
     def __init__(self, *args, **kwargs):
         super().__init__(*args, **kwargs)
-        pass
 
     def __getitem__(self, i):
         image = cv2.imread(self.images[i])
