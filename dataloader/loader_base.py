@@ -88,15 +88,21 @@ class LOADER_BASE(Dataset):
             case 'yolo':
                 _, new_label_path = self.install(i, image)
                 # make label
-                self.yolo_hbb(new_label_path,
-                              label,
-                              *image.shape[:2][::-1])
+                if label.shape[1] == 5:
+                    self.yolo_hbb(new_label_path,
+                                  label,
+                                  *image.shape[:2][::-1])
+                else:
+                    self.yolo_obb(new_label_path,
+                                  label,
+                                  *image.shape[:2][::-1])
             case 'coco':
                 new_image_path, _ = self.install(i, image, resize=(640, 640))
                 # make label
-                self.coco_hbb(i, new_image_path,
-                              label,
-                              640, 640)
+                if label.shape[1] == 5:
+                    self.coco_hbb(i, new_image_path,
+                                  label,
+                                  640, 640)
 
     def install(self,
                 i: int,
@@ -104,7 +110,7 @@ class LOADER_BASE(Dataset):
                 path_depth: int = 3,
                 resize: Tuple[int, int] = None):
         new_image_name = '.'.join(self.images[i].split('/')[-path_depth:])
-        new_label_name = new_image_name.replace('jpg', 'txt')
+        new_label_name = '.'.join(new_image_name.split('.')[:-1] + ['txt'])
         if self.split_i[i] == 0:
             tvt = 'train'
         elif self.split_i[i] == 1:
