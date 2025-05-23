@@ -22,7 +22,7 @@ if args.show and args.make:
 
 def main():
     # make & load dataset
-    root_path, datasets = data_select(args)
+    save_path, datasets = data_select(args)
 
     # check dataset
     if args.show:
@@ -36,7 +36,7 @@ def main():
 
     # convert & copy dataset
     if args.make:
-        print(f'{args.make} datasets saved in', root_path)
+        print(f'{args.make} datasets saved in', save_path)
 
         match args.make:
             case 'yolo':
@@ -44,7 +44,7 @@ def main():
             case 'coco':
                 paths = ['images/train', 'images/val', 'labels']
         for path in paths:
-            os.makedirs(os.path.join(root_path, path), exist_ok=True)
+            os.makedirs(os.path.join(save_path, path), exist_ok=True)
 
         dataloader = DataLoader(datasets, num_workers=args.work)
         for idx, _ in tqdm(enumerate(dataloader), total=len(datasets), ncols=80): pass
@@ -57,7 +57,7 @@ def main():
                 coco_dict["images"] = list(coco_dict["images"])
                 coco_dict["annotations"] = list(coco_dict["annotations"])
                 coco_dict["categories"] = categories
-                with open(os.path.join(root_path, 'labels', filename), 'w', encoding='utf-8') as f:
+                with open(os.path.join(save_path, 'labels', filename), 'w', encoding='utf-8') as f:
                     json.dump(coco_dict, f, ensure_ascii=False, indent=4)
 
             dump('instances_train.json', datasets.coco_train)
