@@ -8,7 +8,7 @@ from tqdm import tqdm
 
 from dataloader.loader_case import data_select
 
-parser = argparse.ArgumentParser(description='prepare train, val dataset')
+parser = argparse.ArgumentParser(description='LOADER')
 parser.add_argument('data', type=int, help='dataset option', default=0)
 parser.add_argument('--show', action='store_true', help='whether show data')
 parser.add_argument('--make', choices=['yolo', 'coco'], help='which format to convert')

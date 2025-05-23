@@ -1,7 +1,7 @@
 from ultralytics import YOLO
 import argparse
 
-parser = argparse.ArgumentParser(description='YOLO TRAIN')
+parser = argparse.ArgumentParser(description='TRAIN')
 parser.add_argument('-m', '--model', type=str, help='model name for .pt', default='yolov8s')
 parser.add_argument('-e', '--epoch', type=int, help='model name for .pt', default=20)
 parser.add_argument('--imgsz', type=int, help='model name for .pt', default=640)

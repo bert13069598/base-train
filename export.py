@@ -3,7 +3,7 @@ import os
 
 from myyolo.models.yolo.model import YOLO
 
-parser = argparse.ArgumentParser(description='YOLO export')
+parser = argparse.ArgumentParser(description='EXPORT')
 parser.add_argument('-m', '--model', type=str, help='model name for .pt',
                     choices=['yolov8n', 'yolov8s', 'yolov8m', 'yolov8l', 'yolov8x',
                              'yolov9t', 'yolov9s', 'yolov9m', 'yolov9c', 'yolov9e',
