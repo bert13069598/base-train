@@ -18,7 +18,7 @@ parser.add_argument('-p', '--project', type=str, help='which object trained', de
 parser.add_argument('--show', action='store_true', help='whether show')
 parser.add_argument('--auto', action='store_true', help='whether auto labeling')
 parser.add_argument('--work', type=int, help='num of workers for multiprocessing', default=16)
-
+parser.add_argument('--dirs', type=str, help='path to load image data')
 args = parser.parse_args()
 
 if args.obb:
@@ -72,10 +72,12 @@ if args.auto:
 if args.show:
     with open(os.path.join('cfg', 'datasets', args.project + '.yaml'), 'r') as f:
         cfg = yaml.safe_load(f)
-    root_path = cfg['path']
+    if args.dirs:
+        img_dir = args.dirs
+    else:
+        img_dir = os.path.join(cfg['path'], 'images', 'val')
     cls2name = cfg['names']
-
-    results = model.predict(source=os.path.join(root_path, 'images', 'val'),
+    results = model.predict(source=img_dir,
                             stream=True,
                             verbose=False)
     for r in results:

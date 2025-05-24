@@ -23,9 +23,11 @@ pip install -r requirements.txt
 ```bash
 python loader.py 0 --show
 ```
+
 ```bash
 python loader.py 0 --make yolo
 ```
+
 - 인덱스 : 준비할 데이터셋 idx
 - `--show` : 라벨링 이미지 확인
 - `--make` : 학습 데이터셋 저장 (`yolo`, `coco`)
@@ -88,13 +90,21 @@ python export.py -m yolov8s -p car -b 1
 
 ## 🎯 check result
 
-> python test.py -m <모델명> <-o> -p <프로젝트> -d <데이터셋>
+> python test.py -m <모델명> <-o> -p <프로젝트> --show --auto
 
 예시
 
 ```bash
-python test.py -m yolov8s -o -p car -d $HOME/Downloads/datasets/test
+python test.py -m yolov8s -o -p car --show
 ```
+
+```bash
+python test.py -m yolov8s -o -p car --auto
+```
+
+- `--show` : 추론 결과 확인
+- `--auto` : 오토라벨링
+- `--dirs` : 데이터 로드 위치 (기본 위치 : `yaml`의 `path`/`images`/`val`)
 
 ## useful command
 
