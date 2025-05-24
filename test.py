@@ -1,11 +1,16 @@
 import argparse
 import os.path
+from concurrent.futures import ThreadPoolExecutor
 
 import cv2
 import numpy as np
+import torch
 import yaml
+from torch.utils.data import DataLoader
 from tqdm import tqdm
 from ultralytics import YOLO
+
+from dataloader.loader_base import LOADER
 
 parser = argparse.ArgumentParser(description='TEST')
 parser.add_argument('-m', '--model', type=str, help='model name for .pt', default='yolov8s')
@@ -20,19 +25,54 @@ args = parser.parse_args()
 if args.obb:
     args.model += '-obb'
 
+
+def collate_fn(image):
+    image = np.asarray(image)
+    image = (image[..., ::-1]).transpose(0, 3, 1, 2)
+    image = np.ascontiguousarray(image)
+    image = torch.from_numpy(image).float()
+    image /= 255
+    return image
+
+
+def annotate_label(path, r):
+    # path = '.'.join(r.path.split('.')[:-1] + ['txt'])
+    path = '.'.join(path.split('.')[:-1] + ['txt'])
+    if r.obb is not None:
+        obb = r.obb
+        with open(path, 'w', encoding='utf-8') as f:
+            for cls, box in zip(obb.cls, obb.xyxyxyxyn):
+                x1, y1, x2, y2, x3, y3, x4, y4 = box.flatten().cpu().numpy()
+                f.write('{:d} {:.6f} {:.6f} {:.6f} {:.6f} {:.6f} {:.6f} {:.6f} {:.6f}\n'.format(
+                    int(cls.item()), x1, y1, x2, y2, x3, y3, x4, y4))
+    else:
+        hbb = r.boxes
+        with open(path, 'w', encoding='utf-8') as f:
+            for cls, box in zip(hbb.cls, hbb.xywhn):
+                cx, cy, w, h = box.cpu().numpy()
+                f.write('{:d} {:.6f} {:.6f} {:.6f} {:.6f}\n'.format(int(cls), cx, cy, w, h))
+
+
 model = YOLO(f'./runs/{args.model}/{args.project}/weights/best.pt')
 
 if args.auto:
-    with open(os.path.join('cfg', 'datasets', args.project + '.yaml'), 'r') as f:
-        cfg = yaml.safe_load(f)
-    results = model.predict(source=os.path.join(cfg['path'], 'images', 'test', '*.png'),
-                            name=args.project,
-                            project=f'runs/{args.model}',
-                            stream=True,
-                            batch=args.work,
-                            save_txt=True,
-                            verbose=False)
-    for r in tqdm(enumerate(results), total=1815, ncols=80): pass
+    datasets = LOADER(args)
+    dataloader = DataLoader(datasets,
+                            batch_size=args.work,
+                            num_workers=min(30, args.work),
+                            pin_memory=True,
+                            # persistent_workers=True,
+                            collate_fn=collate_fn
+                            )
+
+    executor = ThreadPoolExecutor()
+    progress = tqdm(total=len(datasets), ncols=80)
+    cnt = 0
+    for tensor in dataloader:
+        progress.update(len(tensor))
+        results = model.predict(tensor, verbose=False)
+        executor.map(lambda args: annotate_label(*args), zip(datasets.images[cnt:cnt + len(tensor)], results))
+        cnt += len(tensor)
 
 if args.show:
     with open(os.path.join('cfg', 'datasets', args.project + '.yaml'), 'r') as f:

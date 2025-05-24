@@ -201,3 +201,23 @@ class LOADER_BASE(Dataset):
         elif self.split_i[i] == 1:
             annotate_image(self.coco_val)
             self.coco_val["annotations"].extend(annotations)
+
+
+class LOADER(Dataset):
+    def __init__(self, args):
+        import yaml
+        from glob import glob
+        self.images = []
+        with open(os.path.join('cfg', 'datasets', args.project + '.yaml'), 'r') as f:
+            cfg = yaml.safe_load(f)
+        self.images.extend(sorted(glob(os.path.join(cfg['path'], 'images', 'test', '*.png'))))
+        image = cv2.imread(self.images[0])
+        self.letterbox = LetterBox(*image.shape[:2][::-1], 640, 640)
+
+    def __getitem__(self, i):
+        image = cv2.imread(self.images[i])
+        image = self.letterbox(image)
+        return image
+
+    def __len__(self):
+        return len(self.images)
