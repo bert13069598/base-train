@@ -215,9 +215,10 @@ class LOADER(Dataset):
         self.letterbox = LetterBox(*image.shape[:2][::-1], 640, 640)
 
     def __getitem__(self, i):
-        image = cv2.imread(self.images[i])
+        path = self.images[i]
+        image = cv2.imread(path)
         image = self.letterbox(image)
-        return image
+        return path, image
 
     def __len__(self):
         return len(self.images)

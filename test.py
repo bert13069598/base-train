@@ -26,13 +26,14 @@ if args.obb:
     args.model += '-obb'
 
 
-def collate_fn(image):
+def collate_fn(batch):
+    paths, image = zip(*batch)
     image = np.asarray(image)
     image = (image[..., ::-1]).transpose(0, 3, 1, 2)
     image = np.ascontiguousarray(image)
     image = torch.from_numpy(image).float()
     image /= 255
-    return image
+    return paths, image
 
 
 def annotate_label(path, r):
@@ -67,12 +68,10 @@ if args.auto:
 
     executor = ThreadPoolExecutor()
     progress = tqdm(total=len(datasets), ncols=80)
-    cnt = 0
-    for tensor in dataloader:
+    for paths, tensor in dataloader:
         progress.update(len(tensor))
         results = model.predict(tensor, verbose=False)
-        executor.map(lambda args: annotate_label(*args), zip(datasets.images[cnt:cnt + len(tensor)], results))
-        cnt += len(tensor)
+        executor.map(lambda args: annotate_label(*args), zip(paths, results))
 
 if args.show:
     with open(os.path.join('cfg', 'datasets', args.project + '.yaml'), 'r') as f:
