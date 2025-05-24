@@ -1,11 +1,10 @@
 import argparse
-import os.path
-from concurrent.futures import ThreadPoolExecutor
-
 import cv2
 import numpy as np
+import os.path
 import torch
 import yaml
+from concurrent.futures import ThreadPoolExecutor
 from torch.utils.data import DataLoader
 from tqdm import tqdm
 from ultralytics import YOLO
@@ -37,7 +36,6 @@ def collate_fn(batch):
 
 
 def annotate_label(path, r):
-    # path = '.'.join(r.path.split('.')[:-1] + ['txt'])
     path = '.'.join(path.split('.')[:-1] + ['txt'])
     if r.obb is not None:
         obb = r.obb
@@ -61,8 +59,6 @@ if args.auto:
     dataloader = DataLoader(datasets,
                             batch_size=args.work,
                             num_workers=min(30, args.work),
-                            pin_memory=True,
-                            # persistent_workers=True,
                             collate_fn=collate_fn
                             )
 
