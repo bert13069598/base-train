@@ -1,10 +1,12 @@
 import argparse
+import os.path
+from concurrent.futures import ThreadPoolExecutor
+from typing import Tuple
+
 import cv2
 import numpy as np
-import os.path
 import torch
 import yaml
-from concurrent.futures import ThreadPoolExecutor
 from torch.utils.data import DataLoader
 from tqdm import tqdm
 from ultralytics import YOLO
@@ -35,20 +37,28 @@ def collate_fn(batch):
     return paths, image
 
 
-def annotate_label(path, r):
+def annotate_label(rescale_factor: Tuple[bool, float, float],
+                   path: str,
+                   r):
     path = '.'.join(path.split('.')[:-1] + ['txt'])
+    w_h, scale, pad = rescale_factor
     if r.obb is not None:
         obb = r.obb
+        x = obb.xyxyxyxyn.cpu().numpy().reshape(-1, 8)
+        x[:, w_h::2] *= scale
+        x[:, w_h::2] -= pad
+
         with open(path, 'w', encoding='utf-8') as f:
-            for cls, box in zip(obb.cls, obb.xyxyxyxyn):
-                x1, y1, x2, y2, x3, y3, x4, y4 = box.flatten().cpu().numpy()
+            for cls, box in zip(obb.cls, x):
+                x1, y1, x2, y2, x3, y3, x4, y4 = box.flatten()
                 f.write('{:d} {:.6f} {:.6f} {:.6f} {:.6f} {:.6f} {:.6f} {:.6f} {:.6f}\n'.format(
                     int(cls.item()), x1, y1, x2, y2, x3, y3, x4, y4))
     else:
         hbb = r.boxes
+        x = hbb.xywhn.cpu().numpy()
         with open(path, 'w', encoding='utf-8') as f:
-            for cls, box in zip(hbb.cls, hbb.xywhn):
-                cx, cy, w, h = box.cpu().numpy()
+            for cls, box in zip(hbb.cls, x):
+                cx, cy, w, h = box
                 f.write('{:d} {:.6f} {:.6f} {:.6f} {:.6f}\n'.format(int(cls), cx, cy, w, h))
 
 
@@ -64,10 +74,17 @@ if args.auto:
 
     executor = ThreadPoolExecutor()
     progress = tqdm(total=len(datasets), ncols=80)
+
+    w0, h0 = datasets.wh0
+    w_h = w0 > h0
+    r = max(w0, h0) / min(w0, h0)
+    pad = abs(w0 - h0) / 2 / min(w0, h0)
+    rescale_factor = w_h, r, pad
+
     for paths, tensor in dataloader:
         progress.update(len(tensor))
         results = model.predict(tensor, verbose=False)
-        executor.map(lambda args: annotate_label(*args), zip(paths, results))
+        executor.map(lambda args: annotate_label(rescale_factor, *args), zip(paths, results))
 
 if args.show:
     with open(os.path.join('cfg', 'datasets', args.project + '.yaml'), 'r') as f:

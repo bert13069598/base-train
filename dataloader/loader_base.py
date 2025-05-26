@@ -219,7 +219,8 @@ class LOADER(Dataset):
         ))
 
         image = cv2.imread(self.images[0])
-        self.letterbox = LetterBox(*image.shape[:2][::-1], 640, 640)
+        self.wh0 = image.shape[:2][::-1]
+        self.letterbox = LetterBox(*self.wh0, 640, 640)
 
     def __getitem__(self, i):
         path = self.images[i]
