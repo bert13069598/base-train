@@ -207,17 +207,26 @@ class LOADER(Dataset):
     def __init__(self, args):
         import yaml
         from glob import glob
-        self.images = []
         with open(os.path.join('cfg', 'datasets', args.project + '.yaml'), 'r') as f:
             cfg = yaml.safe_load(f)
-        self.images.extend(sorted(glob(os.path.join(cfg['path'], 'images', 'test', '*.png'))))
+        if args.dirs:
+            img_dir = args.dirs
+        else:
+            img_dir = os.path.join(cfg['path'], 'images', 'val')
+        self.images = []
+        self.images.extend(sorted(
+            sum([glob(os.path.join(img_dir, ext)) for ext in ['*.png', '*.jpg', '*.jpeg', '*.bmp', '*.webp']], [])
+        ))
+
         image = cv2.imread(self.images[0])
-        self.letterbox = LetterBox(*image.shape[:2][::-1], 640, 640)
+        self.wh0 = image.shape[:2][::-1]
+        self.letterbox = LetterBox(*self.wh0, 640, 640)
 
     def __getitem__(self, i):
-        image = cv2.imread(self.images[i])
+        path = self.images[i]
+        image = cv2.imread(path)
         image = self.letterbox(image)
-        return image
+        return path, image
 
     def __len__(self):
         return len(self.images)

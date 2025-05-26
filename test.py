@@ -1,6 +1,7 @@
 import argparse
 import os.path
 from concurrent.futures import ThreadPoolExecutor
+from typing import Tuple
 
 import cv2
 import numpy as np
@@ -19,37 +20,45 @@ parser.add_argument('-p', '--project', type=str, help='which object trained', de
 parser.add_argument('--show', action='store_true', help='whether show')
 parser.add_argument('--auto', action='store_true', help='whether auto labeling')
 parser.add_argument('--work', type=int, help='num of workers for multiprocessing', default=16)
-
+parser.add_argument('--dirs', type=str, help='path to load image data')
 args = parser.parse_args()
 
 if args.obb:
     args.model += '-obb'
 
 
-def collate_fn(image):
+def collate_fn(batch):
+    paths, image = zip(*batch)
     image = np.asarray(image)
     image = (image[..., ::-1]).transpose(0, 3, 1, 2)
     image = np.ascontiguousarray(image)
     image = torch.from_numpy(image).float()
     image /= 255
-    return image
+    return paths, image
 
 
-def annotate_label(path, r):
-    # path = '.'.join(r.path.split('.')[:-1] + ['txt'])
+def annotate_label(rescale_factor: Tuple[bool, float, float],
+                   path: str,
+                   r):
     path = '.'.join(path.split('.')[:-1] + ['txt'])
+    w_h, scale, pad = rescale_factor
     if r.obb is not None:
         obb = r.obb
+        x = obb.xyxyxyxyn.cpu().numpy().reshape(-1, 8)
+        x[:, w_h::2] *= scale
+        x[:, w_h::2] -= pad
+
         with open(path, 'w', encoding='utf-8') as f:
-            for cls, box in zip(obb.cls, obb.xyxyxyxyn):
-                x1, y1, x2, y2, x3, y3, x4, y4 = box.flatten().cpu().numpy()
+            for cls, box in zip(obb.cls, x):
+                x1, y1, x2, y2, x3, y3, x4, y4 = box.flatten()
                 f.write('{:d} {:.6f} {:.6f} {:.6f} {:.6f} {:.6f} {:.6f} {:.6f} {:.6f}\n'.format(
                     int(cls.item()), x1, y1, x2, y2, x3, y3, x4, y4))
     else:
         hbb = r.boxes
+        x = hbb.xywhn.cpu().numpy()
         with open(path, 'w', encoding='utf-8') as f:
-            for cls, box in zip(hbb.cls, hbb.xywhn):
-                cx, cy, w, h = box.cpu().numpy()
+            for cls, box in zip(hbb.cls, x):
+                cx, cy, w, h = box
                 f.write('{:d} {:.6f} {:.6f} {:.6f} {:.6f}\n'.format(int(cls), cx, cy, w, h))
 
 
@@ -60,27 +69,32 @@ if args.auto:
     dataloader = DataLoader(datasets,
                             batch_size=args.work,
                             num_workers=min(30, args.work),
-                            pin_memory=True,
-                            # persistent_workers=True,
                             collate_fn=collate_fn
                             )
 
     executor = ThreadPoolExecutor()
     progress = tqdm(total=len(datasets), ncols=80)
-    cnt = 0
-    for tensor in dataloader:
+
+    w0, h0 = datasets.wh0
+    w_h = w0 > h0
+    r = max(w0, h0) / min(w0, h0)
+    pad = abs(w0 - h0) / 2 / min(w0, h0)
+    rescale_factor = w_h, r, pad
+
+    for paths, tensor in dataloader:
         progress.update(len(tensor))
         results = model.predict(tensor, verbose=False)
-        executor.map(lambda args: annotate_label(*args), zip(datasets.images[cnt:cnt + len(tensor)], results))
-        cnt += len(tensor)
+        executor.map(lambda args: annotate_label(rescale_factor, *args), zip(paths, results))
 
 if args.show:
     with open(os.path.join('cfg', 'datasets', args.project + '.yaml'), 'r') as f:
         cfg = yaml.safe_load(f)
-    root_path = cfg['path']
+    if args.dirs:
+        img_dir = args.dirs
+    else:
+        img_dir = os.path.join(cfg['path'], 'images', 'val')
     cls2name = cfg['names']
-
-    results = model.predict(source=os.path.join(root_path, 'images', 'val'),
+    results = model.predict(source=img_dir,
                             stream=True,
                             verbose=False)
     for r in results:
