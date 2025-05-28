@@ -56,6 +56,9 @@ def annotate_label(rescale_factor: Tuple[bool, float, float],
     else:
         hbb = r.boxes
         x = hbb.xywhn.cpu().numpy()
+        x[:, 2 + w_h] *= scale
+        x[:, int(w_h)] = 0.5 + (x[:, int(w_h)] - 0.5) * scale
+
         with open(path, 'w', encoding='utf-8') as f:
             for cls, box in zip(hbb.cls, x):
                 cx, cy, w, h = box
