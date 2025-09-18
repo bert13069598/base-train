@@ -1,7 +1,8 @@
-# TODO: add your data
-data = [
-    'car',
-]
+import glob
+import os
+
+data = sorted(glob.glob(os.path.join('cfg/datasets', "*.yaml")), key=os.path.getctime)
+data = [data.split('/')[-1].replace('.yaml', '') for data in data]
 
 # file name
 # dataloader/loader/loader_car.py -> loader_car
