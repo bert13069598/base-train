@@ -100,6 +100,7 @@ if args.show:
     results = model.predict(source=img_dir,
                             stream=True,
                             verbose=False)
+    paused = False
     for r in results:
         if r.obb is not None:
             obb = r.obb
@@ -114,6 +115,8 @@ if args.show:
                 cv2.rectangle(r.orig_img, (x1, y1), (x2, y2), (0, 255, 0), 2)
                 cv2.putText(r.orig_img, cls2name[cls.item()], (x1, y1 - 5), 0, 1, (0, 255, 0), 2, 16)
         cv2.imshow('sample', r.orig_img)
-        key = cv2.waitKey(1) & 0xFF
+        key = cv2.waitKey(0 if paused else 1) & 0xFF
         if key == 27:
             break
+        elif key == 32:  # Space key
+            paused = not paused
