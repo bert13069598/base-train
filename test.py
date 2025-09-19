@@ -1,6 +1,7 @@
 import argparse
 import os.path
 from concurrent.futures import ThreadPoolExecutor
+from glob import glob
 from typing import Tuple
 
 import cv2
@@ -101,7 +102,7 @@ if args.show:
                             stream=True,
                             verbose=False)
     paused = False
-    for r in results:
+    for r in tqdm(results, total=len(glob(os.path.join(img_dir, '*'))), ncols=80):
         if r.obb is not None:
             obb = r.obb
             for cls, box in zip(obb.cls, obb.xyxyxyxy.cpu()):
