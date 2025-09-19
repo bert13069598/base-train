@@ -25,10 +25,12 @@ elif args.init:
         exit()
     import shutil
 
-    shutil.copy("dataloader/loader/loader_car.py", f"dataloader/loader/loader_{args.init}.py")
     shutil.copy("cfg/datasets/car.yaml", f"cfg/datasets/{args.init}.yaml")
-    print(f'create {args.init}')
-    print(f"python loader.py {len(loader.data)} --show")
+    shutil.copy("dataloader/loader/loader_car.py", f"dataloader/loader/loader_{args.init}.py")
+    print(f'{args.init} created\n'
+          f'1. configure dataset path: cfg/datasets/{args.init}.yaml\n'
+          f'2. implement data loader: dataloader/loader/loader_{args.init}.py\n'
+          f'3. verify setup by running: python loader.py {len(loader.data)} --show')
     exit()
 else:
     parser.error("Either 'data' or '--init' must be provided.")
