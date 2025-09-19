@@ -112,7 +112,7 @@ python test.py -m yolov8s -o -p car --auto
 
 - `--show` : 추론 결과 확인
 - `--auto` : 오토라벨링
-- `--dirs` : 데이터 로드 위치 (기본 위치 : `yaml`의 `path`/`images`/`val`)
+- `--dirs` : 데이터 로드 위치 (기본 위치 : `yaml`의 `test`)
 
 ## useful command
 
@@ -126,4 +126,10 @@ find . -type f -name "*.jpg" | xargs rm -f
 
 ```bash
 find . -type f -name "*.txt" | xargs rm -f
+```
+
+`val` 폴더 안의 랜덤 파일 30개 `test` 폴더로 복사
+
+```bash
+find val -maxdepth 1 -type f | shuf -n 30 | xargs -I{} cp {} test/
 ```

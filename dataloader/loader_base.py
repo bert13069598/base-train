@@ -212,7 +212,7 @@ class LOADER(Dataset):
         if args.dirs:
             img_dir = args.dirs
         else:
-            img_dir = os.path.join(cfg['path'], 'images', 'val')
+            img_dir = os.path.join(cfg['path'], cfg['test'])
         self.images = []
         self.images.extend(sorted(
             sum([glob(os.path.join(img_dir, ext)) for ext in ['*.png', '*.jpg', '*.jpeg', '*.bmp', '*.webp']], [])

@@ -95,7 +95,7 @@ if args.show:
     if args.dirs:
         img_dir = args.dirs
     else:
-        img_dir = os.path.join(cfg['path'], 'images', 'val')
+        img_dir = os.path.join(cfg['path'], cfg['test'])
     cls2name = cfg['names']
     results = model.predict(source=img_dir,
                             stream=True,
