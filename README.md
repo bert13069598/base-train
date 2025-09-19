@@ -16,7 +16,7 @@ pip install -r requirements.txt
 
 ## 📂 prepare dataset
 
-> python loader.py <인덱스> <형식> --show --make
+> python loader.py \<idx> <show | make>
 
 예시
 
@@ -41,15 +41,17 @@ python loader.py 0 --make yolo
 python loader.py --init <데이터셋명>
 ```
 
-2. [cfg/datasets](cfg/datasets)/<데이터셋명>.yaml 작성
-3. [dataloader/loader](dataloader/loader)/loader_<데이터셋명>.py 작성
-4. `loader.py` 옵션 지정 후 구동
+1. [cfg/datasets](cfg/datasets)/<데이터셋명>.yaml 작성
+2. [dataloader/loader](dataloader/loader)/loader_<데이터셋명>.py 작성
+3. `loader.py` 옵션 지정 후 구동
 
 | dataset | folder path / filename | idx | total | link |
 |---------|------------------------|:---:|-------|------|
 |         |                        |     |       |      |
 
 ## 🚀 train dataset
+
+<데이터셋명>과 동일하게 <프로젝트> 설정
 
 > python train.py -m <모델명> <-o> -p <프로젝트>
 
@@ -59,9 +61,8 @@ python loader.py --init <데이터셋명>
 python train.py -m yolov8s -p car
 ```
 
-1. [cfg/datasets](cfg/datasets)에 `yaml` 파일명을 프로젝트명과 동일하게 준비
-2. 데이터셋 준비
-3. `train.py` 구동
+1. [cfg/datasets](cfg/datasets)/<데이터셋명>.yaml 경로 확인
+2. `train.py` 구동
 
 ### yolo dataset structure
 
