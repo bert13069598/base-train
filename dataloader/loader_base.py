@@ -218,15 +218,20 @@ class LOADER(Dataset):
             sum([glob(os.path.join(img_dir, ext)) for ext in ['*.png', '*.jpg', '*.jpeg', '*.bmp', '*.webp']], [])
         ))
 
-        image = cv2.imread(self.images[0])
-        self.wh0 = image.shape[:2][::-1]
-        self.letterbox = LetterBox(*self.wh0, 640, 640)
-
     def __getitem__(self, i):
         path = self.images[i]
         image = cv2.imread(path)
-        image = self.letterbox(image)
-        return path, image
+        wh0 = image.shape[:2][::-1]
+        letterbox = LetterBox(*wh0, 640, 640)
+        image = letterbox(image)
+
+        w0, h0 = wh0
+        w_h = w0 > h0
+        r = max(w0, h0) / min(w0, h0)
+        pad = abs(w0 - h0) / 2 / min(w0, h0)
+        rescale_factor = w_h, r, pad
+
+        return path, rescale_factor, image
 
     def __len__(self):
         return len(self.images)

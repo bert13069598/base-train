@@ -29,17 +29,17 @@ if args.obb:
 
 
 def collate_fn(batch):
-    paths, image = zip(*batch)
+    paths, rescale_factor, image = zip(*batch)
     image = np.asarray(image)
     image = (image[..., ::-1]).transpose(0, 3, 1, 2)
     image = np.ascontiguousarray(image)
     image = torch.from_numpy(image).float()
     image /= 255
-    return paths, image
+    return paths, rescale_factor, image
 
 
-def annotate_label(rescale_factor: Tuple[bool, float, float],
-                   path: str,
+def annotate_label(path: str,
+                   rescale_factor: Tuple[bool, float, float],
                    r):
     path = '.'.join(path.split('.')[:-1] + ['txt'])
     w_h, scale, pad = rescale_factor
@@ -79,16 +79,10 @@ if args.auto:
     executor = ThreadPoolExecutor()
     progress = tqdm(total=len(datasets), ncols=80)
 
-    w0, h0 = datasets.wh0
-    w_h = w0 > h0
-    r = max(w0, h0) / min(w0, h0)
-    pad = abs(w0 - h0) / 2 / min(w0, h0)
-    rescale_factor = w_h, r, pad
-
-    for paths, tensor in dataloader:
+    for paths, rescale_factor, tensor in dataloader:
         progress.update(len(tensor))
         results = model.predict(tensor, verbose=False)
-        executor.map(lambda args: annotate_label(rescale_factor, *args), zip(paths, results))
+        executor.map(lambda args: annotate_label(*args), zip(paths, rescale_factor, results))
 
 if args.show:
     with open(os.path.join('cfg', 'datasets', args.project + '.yaml'), 'r') as f:
@@ -97,12 +91,16 @@ if args.show:
         img_dir = args.dirs
     else:
         img_dir = os.path.join(cfg['path'], cfg['test'])
+    images = []
+    images.extend(sorted(
+        sum([glob(os.path.join(img_dir, ext)) for ext in ['*.png', '*.jpg', '*.jpeg', '*.bmp', '*.webp']], [])
+    ))
     cls2name = cfg['names']
     results = model.predict(source=img_dir,
                             stream=True,
                             verbose=False)
     paused = False
-    for r in tqdm(results, total=len(glob(os.path.join(img_dir, '*'))), ncols=80):
+    for r in tqdm(results, total=len(images), ncols=80):
         if r.obb is not None:
             obb = r.obb
             for cls, box in zip(obb.cls, obb.xyxyxyxy.cpu()):
