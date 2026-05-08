@@ -1,3 +1,4 @@
 ultralytics==8.4.47
 tensorboard==2.19.0
 onnx_graphsurgeon==0.5.8
+tqdm==4.67.3
