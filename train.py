@@ -1,5 +1,7 @@
-from ultralytics import YOLO
 import argparse
+from pathlib import Path
+
+from ultralytics import YOLO
 
 parser = argparse.ArgumentParser(description='TRAIN')
 parser.add_argument('-m', '--model', type=str, help='model name for .pt', default='yolov8s')
@@ -8,6 +10,8 @@ parser.add_argument('--imgsz', type=int, help='model name for .pt', default=640)
 parser.add_argument('-o', '--obb', action='store_true', help='whether obb')
 parser.add_argument('-p', '--project', type=str, help='which object trained', default=None)
 args = parser.parse_args()
+
+ROOT = Path(__file__).resolve().parent
 
 # Load a model
 if args.obb:
@@ -20,6 +24,6 @@ results = model.train(
     epochs=args.epoch,
     imgsz=args.imgsz,
     name=args.project,
-    project=f'runs/{args.model}',
-    device=0
+    project=str(ROOT / "runs" / args.model),
+    device=[0, 1]
 )
