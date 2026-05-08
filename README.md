@@ -8,7 +8,7 @@ git remote add upstream https://github.com/bert13069598/base-train.git
 
 ## 📋 dependency
 
-> python 3.10
+> python 3.12
 
 ```bash
 pip install -r requirements.txt
