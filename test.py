@@ -1,7 +1,6 @@
 import argparse
 import os.path
 from concurrent.futures import ThreadPoolExecutor
-from glob import glob
 from typing import Dict, List, Tuple
 
 import cv2
@@ -12,7 +11,7 @@ from torch.utils.data import DataLoader
 from tqdm import tqdm
 from ultralytics import YOLO
 
-from dataloader.loader_base import LOADER
+from dataloader.loader_base import LOADER, get_image_paths
 
 parser = argparse.ArgumentParser(description='TEST')
 parser.add_argument('-m', '--model', type=str, help='model name for .pt', default='yolov8s')
@@ -48,6 +47,16 @@ def collate_fn(batch):
     return paths, rescale_factor, image
 
 
+def test_collate_fn(batch):
+    paths, rescale_factor, labels, image = zip(*batch)
+    image = np.asarray(image)
+    image = (image[..., ::-1]).transpose(0, 3, 1, 2)
+    image = np.ascontiguousarray(image)
+    image = torch.from_numpy(image).float()
+    image /= 255
+    return paths, rescale_factor, labels, image
+
+
 def annotate_label(path: str,
                    rescale_factor: Tuple[bool, float, float],
                    r):
@@ -79,37 +88,6 @@ def annotate_label(path: str,
 def load_cfg():
     with open(os.path.join('cfg', 'datasets', args.project + '.yaml'), 'r') as f:
         return yaml.safe_load(f)
-
-
-def get_image_paths(img_dir: str) -> List[str]:
-    images = []
-    images.extend(sorted(
-        sum([glob(os.path.join(img_dir, ext)) for ext in ['*.png', '*.jpg', '*.jpeg', '*.bmp', '*.webp']], [])
-    ))
-    return images
-
-
-def label_path_for(image_path: str) -> str:
-    parts = image_path.split(os.sep)
-    if 'images' in parts:
-        parts[parts.index('images')] = 'labels'
-        label_path = os.sep.join(parts)
-        return '.'.join(label_path.split('.')[:-1] + ['txt'])
-    return '.'.join(image_path.split('.')[:-1] + ['txt'])
-
-
-def read_yolo_label(label_path: str) -> List[Tuple[int, np.ndarray]]:
-    labels = []
-    with open(label_path, 'r', encoding='utf-8') as f:
-        for line_no, line in enumerate(f, start=1):
-            cols = line.strip().split()
-            if not cols:
-                continue
-            if len(cols) not in (5, 9):
-                raise RuntimeError(f'Invalid label format: {label_path}:{line_no}')
-            cls = int(float(cols[0]))
-            labels.append((cls, np.asarray(cols[1:], dtype=np.float32)))
-    return labels
 
 
 def hbb_to_xyxy(box: np.ndarray) -> np.ndarray:
@@ -149,13 +127,18 @@ def box_iou(pred: np.ndarray, target: np.ndarray) -> float:
     return hbb_iou(pred, target)
 
 
-def predictions_from_result(r) -> List[Tuple[int, np.ndarray]]:
+def predictions_from_result(r, rescale_factor: Tuple[bool, float, float]) -> List[Tuple[int, np.ndarray]]:
     predictions = []
+    w_h, scale, pad = rescale_factor
     if r.obb is not None:
         boxes = r.obb.xyxyxyxyn.cpu().numpy().reshape(-1, 8)
+        boxes[:, w_h::2] *= scale
+        boxes[:, w_h::2] -= pad
         classes = r.obb.cls.cpu().numpy()
     else:
         boxes = r.boxes.xywhn.cpu().numpy()
+        boxes[:, 2 + w_h] *= scale
+        boxes[:, int(w_h)] = 0.5 + (boxes[:, int(w_h)] - 0.5) * scale
         classes = r.boxes.cls.cpu().numpy()
     for cls, box in zip(classes, boxes):
         predictions.append((int(cls), box.astype(np.float32)))
@@ -167,74 +150,38 @@ def f2_score(tp: int, fp: int, fn: int) -> float:
     return 0.0 if denominator == 0 else 5 * tp / denominator
 
 
-if args.auto:
-    datasets = LOADER(args)
-    dataloader = DataLoader(datasets,
-                            batch_size=args.work,
-                            num_workers=min(30, args.work),
-                            collate_fn=collate_fn
-                            )
+def update_counts(counts: Dict[int, Dict[str, int]],
+                  predictions: List[Tuple[int, np.ndarray]],
+                  targets: List[Tuple[int, np.ndarray]],
+                  iou_threshold: float = 0.5):
+    for cls, _ in predictions + targets:
+        counts.setdefault(cls, {'tp': 0, 'fp': 0, 'fn': 0})
 
-    executor = ThreadPoolExecutor()
-    progress = tqdm(total=len(datasets), ncols=80)
+    for cls in sorted(counts):
+        pred_boxes = [box for pred_cls, box in predictions if pred_cls == cls]
+        target_boxes = [box for target_cls, box in targets if target_cls == cls]
+        matched = set()
 
-    for paths, rescale_factor, tensor in dataloader:
-        progress.update(len(tensor))
-        results = get_model().predict(tensor, verbose=False)
-        executor.map(lambda args: annotate_label(*args), zip(paths, rescale_factor, results))
+        for pred_box in pred_boxes:
+            best_iou = 0.0
+            best_i = None
+            for i, target_box in enumerate(target_boxes):
+                if i in matched:
+                    continue
+                iou = box_iou(pred_box, target_box)
+                if iou > best_iou:
+                    best_iou = iou
+                    best_i = i
+            if best_i is not None and best_iou >= iou_threshold:
+                counts[cls]['tp'] += 1
+                matched.add(best_i)
+            else:
+                counts[cls]['fp'] += 1
 
-if args.test:
-    cfg = load_cfg()
-    if 'test' not in cfg:
-        raise RuntimeError(f"cfg/datasets/{args.project}.yaml must define cfg['test'] for --test")
+        counts[cls]['fn'] += len(target_boxes) - len(matched)
 
-    img_dir = os.path.join(cfg['path'], cfg['test'])
-    images = get_image_paths(img_dir)
-    if not images:
-        raise RuntimeError(f'No test images found: {img_dir}')
 
-    label_paths = [label_path_for(path) for path in images]
-    if not any(os.path.exists(path) for path in label_paths):
-        raise RuntimeError(f"No ground-truth txt files found for cfg['test']: {img_dir}")
-    missing = [path for path in label_paths if not os.path.exists(path)]
-    if missing:
-        raise RuntimeError(f'Missing ground-truth txt file: {missing[0]}')
-
-    cls2name = {int(k): v for k, v in cfg['names'].items()}
-    counts = {cls: {'tp': 0, 'fp': 0, 'fn': 0} for cls in cls2name}
-    results = get_model().predict(source=img_dir, stream=True, verbose=False)
-
-    iou_threshold = 0.5
-    for r, label_path in tqdm(zip(results, label_paths), total=len(images), ncols=80):
-        predictions = predictions_from_result(r)
-        targets = read_yolo_label(label_path)
-        for cls, _ in predictions + targets:
-            counts.setdefault(cls, {'tp': 0, 'fp': 0, 'fn': 0})
-
-        for cls in sorted(counts):
-            pred_boxes = [box for pred_cls, box in predictions if pred_cls == cls]
-            target_boxes = [box for target_cls, box in targets if target_cls == cls]
-            matched = set()
-
-            for pred_box in pred_boxes:
-                best_iou = 0.0
-                best_i = None
-                for i, target_box in enumerate(target_boxes):
-                    if i in matched:
-                        continue
-                    iou = box_iou(pred_box, target_box)
-                    if iou > best_iou:
-                        best_iou = iou
-                        best_i = i
-                if best_i is not None and best_iou >= iou_threshold:
-                    counts[cls]['tp'] += 1
-                    matched.add(best_i)
-                else:
-                    counts[cls]['fp'] += 1
-
-            counts[cls]['fn'] += len(target_boxes) - len(matched)
-
-    # print_f2_table
+def print_f2_table(counts: Dict[int, Dict[str, int]], cls2name: Dict[int, str]):
     rows = []
     total = {'tp': 0, 'fp': 0, 'fn': 0}
     for cls in sorted(counts):
@@ -252,15 +199,45 @@ if args.test:
     for row in rows:
         widths = [max(width, len(str(value))) for width, value in zip(widths, row)]
 
-
     def format_row(row):
         return ' | '.join(str(value).ljust(width) for value, width in zip(row, widths))
-
 
     print(format_row(headers))
     print('-+-'.join('-' * width for width in widths))
     for row in rows:
         print(format_row(row))
+
+
+if args.auto:
+    datasets = LOADER(args)
+    dataloader = DataLoader(datasets,
+                            batch_size=args.work,
+                            num_workers=min(30, args.work),
+                            collate_fn=collate_fn
+                            )
+
+    executor = ThreadPoolExecutor()
+    with tqdm(total=len(datasets), ncols=80) as progress:
+        for paths, rescale_factor, tensor in dataloader:
+            progress.update(len(tensor))
+            results = get_model().predict(tensor, verbose=False)
+            executor.map(lambda args: annotate_label(*args), zip(paths, rescale_factor, results))
+
+if args.test:
+    datasets = LOADER(args)
+    dataloader = DataLoader(datasets,
+                            batch_size=args.work,
+                            num_workers=min(30, args.work),
+                            collate_fn=test_collate_fn)
+    counts = {cls: {'tp': 0, 'fp': 0, 'fn': 0} for cls in datasets.cls2name}
+    with tqdm(total=len(datasets), ncols=80) as progress:
+        for _, rescale_factor, labels, tensor in dataloader:
+            progress.update(len(tensor))
+            results = get_model().predict(tensor, verbose=False)
+            for result, factor, target in zip(results, rescale_factor, labels):
+                update_counts(counts, predictions_from_result(result, factor), list(target))
+
+    print_f2_table(counts, datasets.cls2name)
 
 if args.show:
     cfg = load_cfg()

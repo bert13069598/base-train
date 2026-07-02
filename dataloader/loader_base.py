@@ -1,11 +1,29 @@
 import os
 from concurrent.futures import ThreadPoolExecutor
+from glob import glob
 from multiprocessing import Manager
-from typing import Tuple
+from typing import List, Tuple
 
 import cv2
 import numpy as np
 from torch.utils.data import Dataset
+
+
+def get_image_paths(img_dir: str) -> List[str]:
+    images = []
+    images.extend(sorted(
+        sum([glob(os.path.join(img_dir, ext)) for ext in ['*.png', '*.jpg', '*.jpeg', '*.bmp', '*.webp']], [])
+    ))
+    return images
+
+
+def label_path_for(image_path: str) -> str:
+    parts = image_path.split(os.sep)
+    if 'images' in parts:
+        parts[parts.index('images')] = 'labels'
+        label_path = os.sep.join(parts)
+        return '.'.join(label_path.split('.')[:-1] + ['txt'])
+    return '.'.join(image_path.split('.')[:-1] + ['txt'])
 
 
 class LetterBox:
@@ -206,21 +224,49 @@ class LOADER_BASE(Dataset):
 class LOADER(Dataset):
     def __init__(self, args):
         import yaml
-        from glob import glob
         with open(os.path.join('cfg', 'datasets', args.project + '.yaml'), 'r') as f:
             cfg = yaml.safe_load(f)
+        self.test = args.test
+        self.cls2name = {int(k): v for k, v in cfg['names'].items()}
+
+        if self.test and 'test' not in cfg:
+            raise RuntimeError(f"cfg/datasets/{args.project}.yaml must define cfg['test'] for --test")
         if args.dirs:
             img_dir = args.dirs
         else:
             img_dir = os.path.join(cfg['path'], cfg['test'])
-        self.images = []
-        self.images.extend(sorted(
-            sum([glob(os.path.join(img_dir, ext)) for ext in ['*.png', '*.jpg', '*.jpeg', '*.bmp', '*.webp']], [])
-        ))
+        self.images = get_image_paths(img_dir)
+        if not self.images:
+            raise RuntimeError(f'No images found: {img_dir}')
+
+        if self.test:
+            self.labels = [label_path_for(path) for path in self.images]
+            if not any(os.path.exists(path) for path in self.labels):
+                raise RuntimeError(f"No ground-truth txt files found for cfg['test']: {img_dir}")
+            missing = [path for path in self.labels if not os.path.exists(path)]
+            if missing:
+                raise RuntimeError(f'Missing ground-truth txt file: {missing[0]}')
+
+    @staticmethod
+    def read_yolo_label(label_path: str):
+        labels = []
+        with open(label_path, 'r', encoding='utf-8') as f:
+            for line_no, line in enumerate(f, start=1):
+                cols = line.strip().split()
+                if not cols:
+                    continue
+                if len(cols) not in (5, 9):
+                    raise RuntimeError(f'Invalid label format: {label_path}:{line_no}')
+                cls = int(float(cols[0]))
+                labels.append((cls, np.asarray(cols[1:], dtype=np.float32)))
+        return labels
 
     def __getitem__(self, i):
         path = self.images[i]
         image = cv2.imread(path)
+        if image is None:
+            raise RuntimeError(f'Failed to read image: {path}')
+
         wh0 = image.shape[:2][::-1]
         letterbox = LetterBox(*wh0, 640, 640)
         image = letterbox(image)
@@ -231,6 +277,8 @@ class LOADER(Dataset):
         pad = abs(w0 - h0) / 2 / min(w0, h0)
         rescale_factor = w_h, r, pad
 
+        if self.test:
+            return path, rescale_factor, self.read_yolo_label(self.labels[i]), image
         return path, rescale_factor, image
 
     def __len__(self):
