@@ -2,7 +2,7 @@ import argparse
 import os.path
 from concurrent.futures import ThreadPoolExecutor
 from glob import glob
-from typing import Tuple
+from typing import Dict, List, Tuple
 
 import cv2
 import numpy as np
@@ -20,12 +20,22 @@ parser.add_argument('-o', '--obb', action='store_true', help='whether obb')
 parser.add_argument('-p', '--project', type=str, help='which object trained', default=None)
 parser.add_argument('--show', action='store_true', help='whether show')
 parser.add_argument('--auto', action='store_true', help='whether auto labeling')
+parser.add_argument('--test', action='store_true', help='whether measure F2-score')
 parser.add_argument('--work', type=int, help='num of workers for multiprocessing', default=16)
 parser.add_argument('--dirs', type=str, help='path to load image data')
 args = parser.parse_args()
 
 if args.obb:
     args.model += '-obb'
+
+model = None
+
+
+def get_model():
+    global model
+    if model is None:
+        model = YOLO(f'./runs/{args.model}/{args.project}/weights/best.pt')
+    return model
 
 
 def collate_fn(batch):
@@ -66,7 +76,96 @@ def annotate_label(path: str,
                 f.write('{:d} {:.6f} {:.6f} {:.6f} {:.6f}\n'.format(int(cls), cx, cy, w, h))
 
 
-model = YOLO(f'./runs/{args.model}/{args.project}/weights/best.pt')
+def load_cfg():
+    with open(os.path.join('cfg', 'datasets', args.project + '.yaml'), 'r') as f:
+        return yaml.safe_load(f)
+
+
+def get_image_paths(img_dir: str) -> List[str]:
+    images = []
+    images.extend(sorted(
+        sum([glob(os.path.join(img_dir, ext)) for ext in ['*.png', '*.jpg', '*.jpeg', '*.bmp', '*.webp']], [])
+    ))
+    return images
+
+
+def label_path_for(image_path: str) -> str:
+    parts = image_path.split(os.sep)
+    if 'images' in parts:
+        parts[parts.index('images')] = 'labels'
+        label_path = os.sep.join(parts)
+        return '.'.join(label_path.split('.')[:-1] + ['txt'])
+    return '.'.join(image_path.split('.')[:-1] + ['txt'])
+
+
+def read_yolo_label(label_path: str) -> List[Tuple[int, np.ndarray]]:
+    labels = []
+    with open(label_path, 'r', encoding='utf-8') as f:
+        for line_no, line in enumerate(f, start=1):
+            cols = line.strip().split()
+            if not cols:
+                continue
+            if len(cols) not in (5, 9):
+                raise RuntimeError(f'Invalid label format: {label_path}:{line_no}')
+            cls = int(float(cols[0]))
+            labels.append((cls, np.asarray(cols[1:], dtype=np.float32)))
+    return labels
+
+
+def hbb_to_xyxy(box: np.ndarray) -> np.ndarray:
+    cx, cy, w, h = box
+    return np.asarray([cx - w / 2, cy - h / 2, cx + w / 2, cy + h / 2], dtype=np.float32)
+
+
+def hbb_iou(a: np.ndarray, b: np.ndarray) -> float:
+    a = hbb_to_xyxy(a)
+    b = hbb_to_xyxy(b)
+    ix1 = max(a[0], b[0])
+    iy1 = max(a[1], b[1])
+    ix2 = min(a[2], b[2])
+    iy2 = min(a[3], b[3])
+    inter = max(0.0, ix2 - ix1) * max(0.0, iy2 - iy1)
+    area_a = max(0.0, a[2] - a[0]) * max(0.0, a[3] - a[1])
+    area_b = max(0.0, b[2] - b[0]) * max(0.0, b[3] - b[1])
+    union = area_a + area_b - inter
+    return 0.0 if union <= 0 else inter / union
+
+
+def obb_iou(a: np.ndarray, b: np.ndarray) -> float:
+    a = a.reshape(-1, 2).astype(np.float32)
+    b = b.reshape(-1, 2).astype(np.float32)
+    area_a = cv2.contourArea(a)
+    area_b = cv2.contourArea(b)
+    if area_a <= 0 or area_b <= 0:
+        return 0.0
+    inter, _ = cv2.intersectConvexConvex(a, b)
+    union = area_a + area_b - inter
+    return 0.0 if union <= 0 else inter / union
+
+
+def box_iou(pred: np.ndarray, target: np.ndarray) -> float:
+    if len(pred) == 8 and len(target) == 8:
+        return obb_iou(pred, target)
+    return hbb_iou(pred, target)
+
+
+def predictions_from_result(r) -> List[Tuple[int, np.ndarray]]:
+    predictions = []
+    if r.obb is not None:
+        boxes = r.obb.xyxyxyxyn.cpu().numpy().reshape(-1, 8)
+        classes = r.obb.cls.cpu().numpy()
+    else:
+        boxes = r.boxes.xywhn.cpu().numpy()
+        classes = r.boxes.cls.cpu().numpy()
+    for cls, box in zip(classes, boxes):
+        predictions.append((int(cls), box.astype(np.float32)))
+    return predictions
+
+
+def f2_score(tp: int, fp: int, fn: int) -> float:
+    denominator = 5 * tp + 4 * fn + fp
+    return 0.0 if denominator == 0 else 5 * tp / denominator
+
 
 if args.auto:
     datasets = LOADER(args)
@@ -81,24 +180,99 @@ if args.auto:
 
     for paths, rescale_factor, tensor in dataloader:
         progress.update(len(tensor))
-        results = model.predict(tensor, verbose=False)
+        results = get_model().predict(tensor, verbose=False)
         executor.map(lambda args: annotate_label(*args), zip(paths, rescale_factor, results))
 
+if args.test:
+    cfg = load_cfg()
+    if 'test' not in cfg:
+        raise RuntimeError(f"cfg/datasets/{args.project}.yaml must define cfg['test'] for --test")
+
+    img_dir = os.path.join(cfg['path'], cfg['test'])
+    images = get_image_paths(img_dir)
+    if not images:
+        raise RuntimeError(f'No test images found: {img_dir}')
+
+    label_paths = [label_path_for(path) for path in images]
+    if not any(os.path.exists(path) for path in label_paths):
+        raise RuntimeError(f"No ground-truth txt files found for cfg['test']: {img_dir}")
+    missing = [path for path in label_paths if not os.path.exists(path)]
+    if missing:
+        raise RuntimeError(f'Missing ground-truth txt file: {missing[0]}')
+
+    cls2name = {int(k): v for k, v in cfg['names'].items()}
+    counts = {cls: {'tp': 0, 'fp': 0, 'fn': 0} for cls in cls2name}
+    results = get_model().predict(source=img_dir, stream=True, verbose=False)
+
+    iou_threshold = 0.5
+    for r, label_path in tqdm(zip(results, label_paths), total=len(images), ncols=80):
+        predictions = predictions_from_result(r)
+        targets = read_yolo_label(label_path)
+        for cls, _ in predictions + targets:
+            counts.setdefault(cls, {'tp': 0, 'fp': 0, 'fn': 0})
+
+        for cls in sorted(counts):
+            pred_boxes = [box for pred_cls, box in predictions if pred_cls == cls]
+            target_boxes = [box for target_cls, box in targets if target_cls == cls]
+            matched = set()
+
+            for pred_box in pred_boxes:
+                best_iou = 0.0
+                best_i = None
+                for i, target_box in enumerate(target_boxes):
+                    if i in matched:
+                        continue
+                    iou = box_iou(pred_box, target_box)
+                    if iou > best_iou:
+                        best_iou = iou
+                        best_i = i
+                if best_i is not None and best_iou >= iou_threshold:
+                    counts[cls]['tp'] += 1
+                    matched.add(best_i)
+                else:
+                    counts[cls]['fp'] += 1
+
+            counts[cls]['fn'] += len(target_boxes) - len(matched)
+
+    # print_f2_table
+    rows = []
+    total = {'tp': 0, 'fp': 0, 'fn': 0}
+    for cls in sorted(counts):
+        row = counts[cls]
+        total['tp'] += row['tp']
+        total['fp'] += row['fp']
+        total['fn'] += row['fn']
+        rows.append([str(cls), cls2name.get(cls, str(cls)), row['tp'], row['fp'], row['fn'],
+                     f'{f2_score(row["tp"], row["fp"], row["fn"]):.4f}'])
+    rows.append(['all', 'all', total['tp'], total['fp'], total['fn'],
+                 f'{f2_score(total["tp"], total["fp"], total["fn"]):.4f}'])
+
+    headers = ['class', 'name', 'TP', 'FP', 'FN', 'F2']
+    widths = [len(header) for header in headers]
+    for row in rows:
+        widths = [max(width, len(str(value))) for width, value in zip(widths, row)]
+
+
+    def format_row(row):
+        return ' | '.join(str(value).ljust(width) for value, width in zip(row, widths))
+
+
+    print(format_row(headers))
+    print('-+-'.join('-' * width for width in widths))
+    for row in rows:
+        print(format_row(row))
+
 if args.show:
-    with open(os.path.join('cfg', 'datasets', args.project + '.yaml'), 'r') as f:
-        cfg = yaml.safe_load(f)
+    cfg = load_cfg()
     if args.dirs:
         img_dir = args.dirs
     else:
         img_dir = os.path.join(cfg['path'], cfg['test'])
-    images = []
-    images.extend(sorted(
-        sum([glob(os.path.join(img_dir, ext)) for ext in ['*.png', '*.jpg', '*.jpeg', '*.bmp', '*.webp']], [])
-    ))
+    images = get_image_paths(img_dir)
     cls2name = cfg['names']
-    results = model.predict(source=img_dir,
-                            stream=True,
-                            verbose=False)
+    results = get_model().predict(source=img_dir,
+                                  stream=True,
+                                  verbose=False)
     paused = False
     for r in tqdm(results, total=len(images), ncols=80):
         if r.obb is not None:
