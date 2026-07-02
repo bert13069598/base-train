@@ -11,7 +11,7 @@ git remote add upstream https://github.com/bert13069598/base-train.git
 > python 3.12
 
 ```bash
-pip install -r requirements.txt
+uv pip install -r requirements.txt
 ```
 
 ## 📂 prepare dataset
