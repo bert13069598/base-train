@@ -225,6 +225,7 @@ def print_f2_table(counts: Dict[int, Dict[str, int]], cls2name: Dict[int, str]):
 
 if args.auto:
     datasets = LOADER(args)
+    print(f'auto labels saved in {os.path.dirname(datasets.images[0])}')
     dataloader = DataLoader(datasets,
                             batch_size=args.work,
                             num_workers=min(30, args.work),
@@ -240,6 +241,9 @@ if args.auto:
 
 if args.test:
     datasets = LOADER(args)
+    print(f'test images loaded from {os.path.dirname(datasets.images[0])}')
+    print(f'test labels loaded from {os.path.dirname(datasets.labels[0])}')
+    print(f'test samples: {len(datasets)} images')
     dataloader = DataLoader(datasets,
                             batch_size=args.work,
                             num_workers=min(30, args.work),
