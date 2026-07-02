@@ -20,6 +20,7 @@ parser.add_argument('-p', '--project', type=str, help='which object trained', de
 parser.add_argument('--show', action='store_true', help='whether show')
 parser.add_argument('--auto', action='store_true', help='whether auto labeling')
 parser.add_argument('--test', action='store_true', help='whether measure F2-score')
+parser.add_argument('--rect', action='store_false', help='whether use minimal rectangle padding')
 parser.add_argument('--work', type=int, help='num of workers for multiprocessing', default=16)
 parser.add_argument('--dirs', type=str, help='path to load image data')
 args = parser.parse_args()
@@ -58,15 +59,13 @@ def test_collate_fn(batch):
 
 
 def annotate_label(path: str,
-                   rescale_factor: Tuple[bool, float, float],
+                   rescale_factor: Tuple[float, float, float, int, int, int, int],
                    r):
     path = '.'.join(path.split('.')[:-1] + ['txt'])
-    w_h, scale, pad = rescale_factor
     if r.obb is not None:
         obb = r.obb
         x = obb.xyxyxyxyn.cpu().numpy().reshape(-1, 8)
-        x[:, w_h::2] *= scale
-        x[:, w_h::2] -= pad
+        x = restore_boxes(x, rescale_factor, is_obb=True)
 
         with open(path, 'w', encoding='utf-8') as f:
             for cls, box in zip(obb.cls, x):
@@ -76,8 +75,7 @@ def annotate_label(path: str,
     else:
         hbb = r.boxes
         x = hbb.xywhn.cpu().numpy()
-        x[:, 2 + w_h] *= scale
-        x[:, int(w_h)] = 0.5 + (x[:, int(w_h)] - 0.5) * scale
+        x = restore_boxes(x, rescale_factor, is_obb=False)
 
         with open(path, 'w', encoding='utf-8') as f:
             for cls, box in zip(hbb.cls, x):
@@ -127,18 +125,35 @@ def box_iou(pred: np.ndarray, target: np.ndarray) -> float:
     return hbb_iou(pred, target)
 
 
-def predictions_from_result(r, rescale_factor: Tuple[bool, float, float]) -> List[Tuple[int, np.ndarray]]:
+def restore_boxes(boxes: np.ndarray,
+                  rescale_factor: Tuple[float, float, float, int, int, int, int],
+                  is_obb: bool) -> np.ndarray:
+    gain, pad_x, pad_y, out_w, out_h, src_w, src_h = rescale_factor
+    boxes = boxes.copy()
+    if is_obb:
+        boxes[:, 0::2] = (boxes[:, 0::2] * out_w - pad_x) / (gain * src_w)
+        boxes[:, 1::2] = (boxes[:, 1::2] * out_h - pad_y) / (gain * src_h)
+    else:
+        boxes[:, [0, 2]] *= out_w
+        boxes[:, [1, 3]] *= out_h
+        boxes[:, 0] = (boxes[:, 0] - pad_x) / (gain * src_w)
+        boxes[:, 1] = (boxes[:, 1] - pad_y) / (gain * src_h)
+        boxes[:, 2] /= gain * src_w
+        boxes[:, 3] /= gain * src_h
+    return boxes
+
+
+def predictions_from_result(r,
+                            rescale_factor: Tuple[float, float, float, int, int, int, int]
+                            ) -> List[Tuple[int, np.ndarray]]:
     predictions = []
-    w_h, scale, pad = rescale_factor
     if r.obb is not None:
         boxes = r.obb.xyxyxyxyn.cpu().numpy().reshape(-1, 8)
-        boxes[:, w_h::2] *= scale
-        boxes[:, w_h::2] -= pad
+        boxes = restore_boxes(boxes, rescale_factor, is_obb=True)
         classes = r.obb.cls.cpu().numpy()
     else:
         boxes = r.boxes.xywhn.cpu().numpy()
-        boxes[:, 2 + w_h] *= scale
-        boxes[:, int(w_h)] = 0.5 + (boxes[:, int(w_h)] - 0.5) * scale
+        boxes = restore_boxes(boxes, rescale_factor, is_obb=False)
         classes = r.boxes.cls.cpu().numpy()
     for cls, box in zip(classes, boxes):
         predictions.append((int(cls), box.astype(np.float32)))
@@ -248,6 +263,7 @@ if args.show:
     images = get_image_paths(img_dir)
     cls2name = cfg['names']
     results = get_model().predict(source=img_dir,
+                                  rect=args.rect,
                                   stream=True,
                                   verbose=False)
     paused = False

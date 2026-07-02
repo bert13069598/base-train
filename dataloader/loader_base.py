@@ -31,24 +31,40 @@ class LetterBox:
                  src_w: int,
                  src_h: int,
                  dst_w: int = 640,
-                 dst_h: int = 640):
+                 dst_h: int = 640,
+                 rect: bool = False,
+                 stride: int = 32):
         self.dst_w = dst_w
         self.dst_h = dst_h
         scale = min((dst_w / src_w, dst_h / src_h))
-        ox = (dst_w - scale * src_w) / 2
-        oy = (dst_h - scale * src_h) / 2
-        self.M = np.array([
-            [scale, 0, ox],
-            [0, scale, oy]
-        ], dtype=np.float32)
+        new_w = round(src_w * scale)
+        new_h = round(src_h * scale)
+        pad_w = dst_w - new_w
+        pad_h = dst_h - new_h
+        if rect:
+            pad_w %= stride
+            pad_h %= stride
+        half_pad_w = pad_w / 2
+        half_pad_h = pad_h / 2
+        self.left = round(half_pad_w - 0.1)
+        self.right = round(half_pad_w + 0.1)
+        self.top = round(half_pad_h - 0.1)
+        self.bottom = round(half_pad_h + 0.1)
+        self.out_w = new_w + self.left + self.right
+        self.out_h = new_h + self.top + self.bottom
+        self.scale = scale
+        self.pad = (self.left, self.top)
+        self.new_shape = (new_w, new_h)
 
     def __call__(self,
                  image: np.ndarray) -> np.ndarray:
-        return cv2.warpAffine(image, self.M,
-                              (self.dst_w, self.dst_h),
-                              flags=cv2.INTER_LINEAR,
-                              borderMode=cv2.BORDER_CONSTANT,
-                              borderValue=(114, 114, 114))
+        if image.shape[:2][::-1] != self.new_shape:
+            image = cv2.resize(image, self.new_shape, interpolation=cv2.INTER_LINEAR)
+        return cv2.copyMakeBorder(image,
+                                  self.top, self.bottom,
+                                  self.left, self.right,
+                                  cv2.BORDER_CONSTANT,
+                                  value=(114, 114, 114))
 
 
 class LOADER_BASE(Dataset):
@@ -227,6 +243,7 @@ class LOADER(Dataset):
         with open(os.path.join('cfg', 'datasets', args.project + '.yaml'), 'r') as f:
             cfg = yaml.safe_load(f)
         self.test = args.test
+        self.rect = getattr(args, 'rect', False)
         self.cls2name = {int(k): v for k, v in cfg['names'].items()}
 
         if self.test and 'test' not in cfg:
@@ -268,14 +285,10 @@ class LOADER(Dataset):
             raise RuntimeError(f'Failed to read image: {path}')
 
         wh0 = image.shape[:2][::-1]
-        letterbox = LetterBox(*wh0, 640, 640)
+        letterbox = LetterBox(*wh0, 640, 640, rect=self.rect)
         image = letterbox(image)
 
-        w0, h0 = wh0
-        w_h = w0 > h0
-        r = max(w0, h0) / min(w0, h0)
-        pad = abs(w0 - h0) / 2 / min(w0, h0)
-        rescale_factor = w_h, r, pad
+        rescale_factor = (letterbox.scale, *letterbox.pad, letterbox.out_w, letterbox.out_h, *wh0)
 
         if self.test:
             return path, rescale_factor, self.read_yolo_label(self.labels[i]), image
