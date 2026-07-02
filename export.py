@@ -17,6 +17,7 @@ parser.add_argument('-m', '--model', type=str, help='model name for .pt',
 parser.add_argument('-o', '--obb', action='store_true', help='whether obb')
 parser.add_argument('-b', '--batch', type=str, help='batch number', choices=['1', '2', '3', '4', 'd'], default='d')
 parser.add_argument('-p', '--project', type=str, help='which object trained', default=None)
+parser.add_argument('--rect', action='store_false', help='whether use minimal rectangle padding')
 args = parser.parse_args()
 
 if args.batch != 'd':
@@ -32,10 +33,29 @@ else:
     pre_model = args.model  # load an official model
     new_model = pre_model
 
+
+def imgsz(src_w: int,
+          src_h: int,
+          dst_w: int = 640,
+          dst_h: int = 640,
+          rect: bool = False,
+          stride: int = 32):
+    scale = min((dst_w / src_w, dst_h / src_h))
+    new_w = round(src_w * scale)
+    new_h = round(src_h * scale)
+    pad_w = dst_w - new_w
+    pad_h = dst_h - new_h
+    if rect:
+        pad_w %= stride
+        pad_h %= stride
+    return new_h + pad_h, new_w + pad_w
+
+
 model = YOLO(f'{pre_model}.pt')
 model.export(format='onnx',
              device='cuda:0',
              opset=17,
+             imgsz=imgsz(1920, 1080, rect=args.rect),
              dynamic=args.batch == 'd',
              batch=1 if args.batch == 'd' else args.batch
              )
