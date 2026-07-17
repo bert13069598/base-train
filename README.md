@@ -1,4 +1,4 @@
-# base-train
+# base-detection
 
 ## 🔄 CI
 
