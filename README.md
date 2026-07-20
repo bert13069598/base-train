@@ -3,7 +3,7 @@
 ## 🔄 CI
 
 ```bash
-git remote add upstream https://github.com/bert13069598/base-train.git
+git remote add upstream https://github.com/bert13069598/base-detection.git
 ```
 
 ## 📋 dependency
