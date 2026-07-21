@@ -172,8 +172,9 @@ class LOADER_BASE(Dataset):
         with open(new_label_path, 'w', encoding='utf-8') as f:
             if len(labels):
                 labels[:, [0, 1]] += labels[:, [2, 3]] / 2
-                labels[:, 0:4:2] /= width
-                labels[:, 1:4:2] /= height
+                if labels.max() > 1:
+                    labels[:, 0:4:2] /= width
+                    labels[:, 1:4:2] /= height
                 for label in labels:
                     cx, cy, w, h, cls = label[:5]
                     f.write('{:d} {:.6f} {:.6f} {:.6f} {:.6f}\n'.format(int(cls), cx, cy, w, h))
@@ -185,8 +186,9 @@ class LOADER_BASE(Dataset):
                  ):
         with open(new_label_path, 'w', encoding='utf-8') as f:
             if len(labels):
-                labels[:, 1::2] /= width
-                labels[:, 2::2] /= height
+                if labels.max() > 1:
+                    labels[:, 1::2] /= width
+                    labels[:, 2::2] /= height
                 for label in labels:
                     cls, x1, y1, x2, y2, x3, y3, x4, y4 = label
                     f.write('{:d} {:.6f} {:.6f} {:.6f} {:.6f} {:.6f} {:.6f} {:.6f} {:.6f}\n'.format(
